@@ -2,8 +2,9 @@ const mongoose = require("mongoose");
 
 const appointmentSchema = new mongoose.Schema({
   client: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  professional: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  salon: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   service: { type: mongoose.Schema.Types.ObjectId, ref: "Service", required: true },
+  professional: { type: mongoose.Schema.Types.ObjectId, ref: "Professional", required: true },
   date: { type: Date, required: true },
   startTime: {
     type: String,

@@ -3,7 +3,7 @@ const router = express.Router();
 const { 
   createService, 
   updateService, 
-  getProfessionalServices, 
+  getSalonServices, 
   deleteService 
 } = require("../controllers/serviceController");
 const { auth, protect, authorize } = require("../middlewares/authMiddleware");
@@ -116,29 +116,29 @@ const { auth, protect, authorize } = require("../middlewares/authMiddleware");
  *       500:
  *         description: Erreur serveur
  * 
- * /api/services/professional/{professionalId}:
+ * /api/services/salon/{salonId}:
  *   get:
- *     summary: Récupérer tous les services d'un professionnel
+ *     summary: Récupérer tous les services d'un salon
  *     tags: [Services]
  *     parameters:
  *       - in: path
- *         name: professionalId
+ *         name: salonId
  *         schema:
  *           type: string
  *         required: true
- *         description: ID du professionnel
+ *         description: ID du salon
  *     responses:
  *       200:
  *         description: Liste des services récupérée avec succès
  *       404:
- *         description: Professionnel non trouvé
+ *         description: Salon non trouvé
  *       500:
  *         description: Erreur serveur
  */
-router.post("/", auth, protect, authorize("professional"), createService);
+router.post("/", auth, protect, authorize("salon"), createService);
 
-router.put("/:id", auth, protect, authorize("professional"), updateService);
-router.get("/professional/:professionalId", getProfessionalServices);
-router.delete("/:id", auth, protect, authorize("professional"), deleteService);
+router.put("/:id", auth, protect, authorize("salon"), updateService);
+router.get("/salon/:salonId", getSalonServices);
+router.delete("/:id", auth, protect, authorize("salon"), deleteService);
 
 module.exports = router; 

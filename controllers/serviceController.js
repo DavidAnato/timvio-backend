@@ -4,21 +4,21 @@ const User = require("../models/User");
 /**
  * @desc Créer un nouveau service
  * @route POST /api/services
- * @access Private (Professional)
+ * @access Private (salon)
  */
 exports.createService = async (req, res) => {
   try {
-    const professionalId = req.user.userId;
+    const salonId = req.user.userId;
     const { name, description, duration, price, category } = req.body;
 
     // Vérifier si l'utilisateur est un professionnel
-    const user = await User.findById(professionalId);
-    if (!user || user.role !== "professional") {
+    const user = await User.findById(salonId);
+    if (!user || user.role !== "salon") {
       return res.status(403).json({ message: "Accès interdit." });
     }
 
     const service = await Service.create({
-      professional: professionalId,
+      salon: salonId,
       name,
       description,
       duration,
@@ -42,17 +42,17 @@ exports.createService = async (req, res) => {
 /**
  * @desc Mettre à jour un service
  * @route PUT /api/services/:id
- * @access Private (Professional)
+ * @access Private (salon)
  */
 exports.updateService = async (req, res) => {
   try {
     const { id } = req.params;
-    const professionalId = req.user.userId;
+    const salonId = req.user.userId;
     const updates = req.body;
 
     const service = await Service.findOne({ 
       _id: id, 
-      professional: professionalId 
+      salon: salonId 
     });
 
     if (!service) {
@@ -80,15 +80,15 @@ exports.updateService = async (req, res) => {
 
 /**
  * @desc Récupérer tous les services d'un professionnel
- * @route GET /api/services/professional/:professionalId
+ * @route GET /api/services/salon/:salonId
  * @access Public
  */
-exports.getProfessionalServices = async (req, res) => {
+exports.getSalonServices = async (req, res) => {
   try {
-    const { professionalId } = req.params;
+    const { salonId } = req.params;
 
     const services = await Service.find({ 
-      professional: professionalId,
+      salon: salonId,
       isActive: true 
     });
 
@@ -105,16 +105,16 @@ exports.getProfessionalServices = async (req, res) => {
 /**
  * @desc Supprimer un service
  * @route DELETE /api/services/:id
- * @access Private (Professional)
+ * @access Private (salon)
  */
 exports.deleteService = async (req, res) => {
   try {
     const { id } = req.params;
-    const professionalId = req.user.userId;
+    const salonId = req.user.userId;
 
     const service = await Service.findOneAndDelete({ 
       _id: id, 
-      professional: professionalId 
+      salon: salonId 
     });
 
     if (!service) {

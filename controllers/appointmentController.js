@@ -2,6 +2,7 @@ const Appointment = require('../models/Appointment');
 const User = require('../models/User');
 const Availability = require('../models/Availability');
 const Service = require('../models/Service');
+const Professional = require('../models/Professional');
 
 /**
  * @desc Créer un nouveau rendez-vous
@@ -10,19 +11,25 @@ const Service = require('../models/Service');
  */
 const createAppointment = async (req, res) => {
   try {
-    const { professionalId, serviceId, date, startTime, endTime, notes } = req.body;
+    const { salonId, serviceId, professionalId, date, startTime, endTime, notes } = req.body;
     const clientId = req.user.userId;
 
-    // Vérifier que le professionnel existe
-    const professional = await User.findOne({ _id: professionalId, role: 'professional' });
-    if (!professional) {
-      return res.status(404).json({ message: "Professionnel non trouvé" });
+    // Vérifier que le salon existe
+    const salon = await User.findOne({ _id: salonId, role: 'salon' });
+    if (!salon) {
+      return res.status(404).json({ message: "Salon non trouvé" });
     }
 
     // Vérifier que le service existe
     const service = await Service.findById(serviceId);
     if (!service) {
       return res.status(404).json({ message: "Service non trouvé" });
+    }
+
+    // Vérifier que le professionnel existe
+    const professional = await Professional.findById(professionalId);
+    if (!professional) {
+      return res.status(404).json({ message: "Professionnel non trouvé" });
     }
 
     // Vérifier que le client existe
@@ -37,24 +44,24 @@ const createAppointment = async (req, res) => {
       return res.status(400).json({ message: "La date doit être dans le futur" });
     }
 
-    // Vérifier que le créneau est disponible
+    // Vérifier que le créneau est disponible pour le salon
     const dayOfWeek = appointmentDate.getDay();
-    const availability = await Availability.findOne({ professional: professionalId });
+    const availability = await Availability.findOne({ salon: salonId });
     
     if (!availability) {
-      return res.status(400).json({ message: "Le professionnel n'a pas défini de disponibilités" });
+      return res.status(400).json({ message: "Le salon n'a pas défini de disponibilités" });
     }
 
-    // Vérifier les exceptions
+    // Vérifier les exceptions du salon
     const exception = availability.exceptions.find(ex => 
       ex.date.toDateString() === appointmentDate.toDateString()
     );
     
     if (exception && !exception.isAvailable) {
-      return res.status(400).json({ message: "Le professionnel n'est pas disponible à cette date" });
+      return res.status(400).json({ message: "Le salon n'est pas disponible à cette date" });
     }
 
-    // Vérifier les créneaux bloqués
+    // Vérifier les créneaux bloqués du salon
     const blockedSlot = availability.blockedSlots.find(slot => 
       slot.date.toDateString() === appointmentDate.toDateString() &&
       slot.startTime <= startTime &&
@@ -65,35 +72,75 @@ const createAppointment = async (req, res) => {
       return res.status(400).json({ message: "Ce créneau est déjà bloqué" });
     }
 
-    // Vérifier les horaires d'ouverture
+    // Vérifier les horaires d'ouverture du salon
     const dayAvailability = availability.availability.find(a => a.dayOfWeek === dayOfWeek);
-    if (!dayAvailability || !dayAvailability.isAvailable) {
-      return res.status(400).json({ message: "Le professionnel n'est pas disponible ce jour" });
+    if (!dayAvailability) {
+      return res.status(400).json({ message: "Le salon n'a pas défini d'horaires pour ce jour" });
     }
 
-    if (startTime < dayAvailability.startTime || endTime > dayAvailability.endTime) {
-      return res.status(400).json({ message: "Le créneau est en dehors des horaires d'ouverture" });
+    // Vérifier si le jour est disponible
+    const slotAvailable = dayAvailability.slots.some(slot => {
+      return startTime >= slot.startTime && endTime <= slot.endTime && slot.isAvailable;
+    });
+
+    if (!slotAvailable) {
+      return res.status(400).json({ message: "Le créneau demandé n'est pas disponible pour ce salon" });
     }
 
-    // Vérifier les conflits avec d'autres rendez-vous
-    const existingAppointment = await Appointment.findOne({
+    // Vérifier les conflits avec d'autres rendez-vous pour le même professionnel
+    const professionalExistingAppointment = await Appointment.findOne({
       professional: professionalId,
-      date: appointmentDate,
-      status: { $ne: 'cancelled' },
+      date: {
+        $gte: new Date(appointmentDate.setHours(0, 0, 0, 0)),
+        $lt: new Date(appointmentDate.setHours(23, 59, 59, 999))
+      },
+      status: { $nin: ['canceled', 'completed'] },
       $or: [
-        { startTime: { $lt: endTime }, endTime: { $gt: startTime } }
+        // vérifie si le nouveau rendez-vous chevauche un existant
+        {
+          $and: [
+            { startTime: { $lt: endTime } },
+            { endTime: { $gt: startTime } }
+          ]
+        }
       ]
     });
 
-    if (existingAppointment) {
-      return res.status(400).json({ message: "Ce créneau est déjà réservé" });
+    if (professionalExistingAppointment) {
+      return res.status(400).json({ 
+        message: "Le professionnel n'est pas disponible à ce moment, il a déjà un rendez-vous programmé" 
+      });
+    }
+
+    // Vérifier les conflits avec d'autres rendez-vous pour le salon
+    const salonExistingAppointment = await Appointment.findOne({
+      salon: salonId,
+      date: {
+        $gte: new Date(appointmentDate.setHours(0, 0, 0, 0)),
+        $lt: new Date(appointmentDate.setHours(23, 59, 59, 999))
+      },
+      status: { $nin: ['canceled', 'completed'] },
+      $or: [
+        // vérifie si le nouveau rendez-vous chevauche un existant
+        {
+          $and: [
+            { startTime: { $lt: endTime } },
+            { endTime: { $gt: startTime } }
+          ]
+        }
+      ]
+    });
+
+    if (salonExistingAppointment) {
+      return res.status(400).json({ message: "Ce créneau est déjà réservé dans ce salon" });
     }
 
     // Créer le rendez-vous
     const appointment = new Appointment({
       client: clientId,
-      professional: professionalId,
+      salon: salonId,
       service: serviceId,
+      professional: professionalId,
       date: appointmentDate,
       startTime,
       endTime,
@@ -102,7 +149,7 @@ const createAppointment = async (req, res) => {
 
     await appointment.save();
 
-    // Bloquer le créneau dans les disponibilités
+    // Bloquer le créneau dans les disponibilités du salon
     availability.blockedSlots.push({
       date: appointmentDate,
       startTime,
@@ -116,6 +163,7 @@ const createAppointment = async (req, res) => {
       appointment
     });
   } catch (error) {
+    console.error("Erreur lors de la création du rendez-vous:", error);
     res.status(500).json({ message: "Erreur lors de la création du rendez-vous", error: error.message });
   }
 };
@@ -135,6 +183,8 @@ const getAppointments = async (req, res) => {
     const filter = {};
     if (role === 'client') {
       filter.client = userId;
+    } else if (role === 'salon') {
+      filter.salon = userId;
     } else if (role === 'professional') {
       filter.professional = userId;
     }
@@ -151,8 +201,9 @@ const getAppointments = async (req, res) => {
 
     const appointments = await Appointment.find(filter)
       .populate('client', 'firstName lastName profilePicture')
-      .populate('professional', 'firstName lastName profilePicture salon')
+      .populate('salon', 'firstName lastName profilePicture salon')
       .populate('service', 'name duration price')
+      .populate('professional', 'name')
       .sort({ date: 1, startTime: 1 });
 
     res.status(200).json(appointments);
@@ -183,7 +234,7 @@ const updateAppointmentStatus = async (req, res) => {
       return res.status(403).json({ message: "Accès non autorisé" });
     }
 
-    if (role === 'professional' && appointment.professional.toString() !== userId) {
+    if (role === 'salon' && appointment.salon.toString() !== userId) {
       return res.status(403).json({ message: "Accès non autorisé" });
     }
 
@@ -192,8 +243,8 @@ const updateAppointmentStatus = async (req, res) => {
     await appointment.save();
 
     // Si le rendez-vous est annulé, débloquer le créneau
-    if (status === 'cancelled') {
-      const availability = await Availability.findOne({ professional: appointment.professional });
+    if (status === 'canceled') {
+      const availability = await Availability.findOne({ salon: appointment.salon });
       if (availability) {
         availability.blockedSlots = availability.blockedSlots.filter(slot => 
           !(slot.date.toDateString() === appointment.date.toDateString() &&
@@ -217,4 +268,4 @@ module.exports = {
   createAppointment,
   getAppointments,
   updateAppointmentStatus
-}; 
+};

@@ -45,7 +45,7 @@ const updateUserProfile = async (req, res) => {
         }
         
         // Gestion des mises à jour selon le rôle
-        if (user.role === "professional") {
+        if (user.role === "salon") {
             // Pour les professionnels, gérer les mises à jour du salon
             if (updates.salon) {
                 user.salon = { ...user.salon, ...updates.salon };

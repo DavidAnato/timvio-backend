@@ -1,7 +1,7 @@
 const User = require('../models/User');
 const Availability = require('../models/Availability');
 
-const searchUsers = async (req, res) => {
+const searchSalons = async (req, res) => {
     try {
         const {
             query,
@@ -15,7 +15,7 @@ const searchUsers = async (req, res) => {
 
         // Filtre de base : uniquement les professionnels vérifiés
         const filter = { 
-            role: 'professional',
+            role: 'salon',
             isVerified: true
         }; 
 
@@ -65,18 +65,18 @@ const searchUsers = async (req, res) => {
             ]);
 
         // Récupérer les disponibilités pour chaque professionnel
-        const professionalsWithAvailability = await Promise.all(users.map(async (professional) => {
+        const salonsWithAvailability = await Promise.all(users.map(async (salon) => {
             const now = new Date();
             const dayOfWeek = now.getDay(); // 0 = Dimanche, 6 = Samedi
             
             // Trouver les disponibilités du professionnel
             const availability = await Availability.findOne({
-                professional: professional._id
+                salon: salon._id
             });
 
             if (!availability) {
                 return {
-                    ...professional.toObject(),
+                    ...salon.toObject(),
                     nextAvailability: null
                 };
             }
@@ -95,7 +95,7 @@ const searchUsers = async (req, res) => {
             // Si une exception existe pour aujourd'hui et qu'elle n'est pas disponible
             if (todayException && !todayException.isAvailable) {
                 return {
-                    ...professional.toObject(),
+                    ...salon.toObject(),
                     nextAvailability: null
                 };
             }
@@ -103,7 +103,7 @@ const searchUsers = async (req, res) => {
             // Si une disponibilité est trouvée pour aujourd'hui
             if (nextRecurringSlot) {
                 return {
-                    ...professional.toObject(),
+                    ...salon.toObject(),
                     nextAvailability: {
                         startTime: nextRecurringSlot.startTime,
                         endTime: nextRecurringSlot.endTime,
@@ -120,7 +120,7 @@ const searchUsers = async (req, res) => {
 
             if (nextAvailableDay) {
                 return {
-                    ...professional.toObject(),
+                    ...salon.toObject(),
                     nextAvailability: {
                         startTime: nextAvailableDay.startTime,
                         endTime: nextAvailableDay.endTime,
@@ -131,7 +131,7 @@ const searchUsers = async (req, res) => {
             }
 
             return {
-                ...professional.toObject(),
+                ...salon.toObject(),
                 nextAvailability: null
             };
         }));
@@ -139,7 +139,7 @@ const searchUsers = async (req, res) => {
         const total = await User.countDocuments(filter);
 
         res.status(200).json({
-            professionals: professionalsWithAvailability,
+            salons: salonsWithAvailability,
             currentPage: page,
             totalPages: Math.ceil(total / limit),
             totalResults: total
@@ -151,5 +151,5 @@ const searchUsers = async (req, res) => {
 };
 
 module.exports = {
-    searchUsers
+    searchSalons
 }; 

@@ -1,17 +1,19 @@
 const nodemailer = require('nodemailer');
+const EMAIL_USER = "david1anato@gmail.com"
+const EMAIL_PASSWORD = "qypaxhrqfixwuocn"
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
+    user: EMAIL_USER,
+    pass: EMAIL_PASSWORD,
   },
 });
 
 const sendOTPEmail = async (email, otp) => {
   try {
     await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+      from: EMAIL_USER,
       to: email,
       subject: 'Code de vérification pour votre compte',
       html: `
@@ -30,7 +32,7 @@ const sendOTPEmail = async (email, otp) => {
 const sendPasswordResetEmail = async (email, otp) => {
   try {
     await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+      from: EMAIL_USER,
       to: email,
       subject: 'Réinitialisation de votre mot de passe',
       html: `

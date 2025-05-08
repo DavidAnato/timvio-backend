@@ -7,7 +7,6 @@ services:
       dockerfile: Dockerfile
     container_name: express-api
     restart: unless-stopped
-    env_file: .env            # variables (PORT, DB_URI, NODE_ENV…)
     networks: [ backend ]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]

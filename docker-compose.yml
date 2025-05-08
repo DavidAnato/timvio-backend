@@ -8,30 +8,12 @@ services:
     container_name: express-api
     restart: unless-stopped
     env_file: .env            # variables (PORT, DB_URI, NODE_ENV…)
-    depends_on:
-      mongo:
-        condition: service_healthy
     networks: [ backend ]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
       interval: 30s
       retries: 3
       start_period: 10s
-
-  mongo:
-    image: mongo:7.0
-    container_name: mongo
-    restart: unless-stopped
-    volumes:
-      - mongo_data:/data/db
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASS}
-    networks: [ backend ]
-    healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
-      interval: 30s
-      retries: 5
 
   nginx:
     build:

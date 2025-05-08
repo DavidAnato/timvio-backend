@@ -10,7 +10,7 @@ const morgan = require('morgan');
 const authRoutes = require('./routes/authRoutes');
 const availabilityRoutes = require('./routes/availabilityRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
-const salonRoutes = require('./routes/SalonRoutes');
+const salonRoutes = require('./routes/salonRoutes');
 const userRoute = require('./routes/userRoute');
 const appointmentRoutes = require('./routes/appointmentRoutes');
 

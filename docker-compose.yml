@@ -3,10 +3,11 @@ version: "3.9"
 services:
   api:
     build:
-      context: ./api          # dossier de votre app Express
+      context: .              # dossier racine du projet
       dockerfile: Dockerfile
     container_name: express-api
     restart: unless-stopped
+    env_file: .env            # variables d'environnement
     networks: [ backend ]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]

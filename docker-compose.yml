@@ -3,37 +3,40 @@ version: "3.9"
 services:
   api:
     build:
-      context: .              # dossier racine du projet
+      context: .              
       dockerfile: Dockerfile
     container_name: express-api
     restart: unless-stopped
-    env_file: .env            # variables d'environnement
-    networks: [ backend ]
+    env_file: .env            
+    networks:
+      - backend
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
       interval: 30s
       retries: 3
       start_period: 10s
 
-  nginx:
-    build:
-      context: ./nginx
-    container_name: nginx
+  caddy:
+    image: caddy:2
+    container_name: caddy
     restart: unless-stopped
     ports:
       - "80:80"
-      # - "443:443"          # décommentez si vous gérez le TLS ici
+      - "443:443"
+    networks:
+      - backend
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Persistance des certificats et configuration
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       api:
-        condition: service_started
-    networks: [ backend ]
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost || exit 1"]
-      interval: 30s
-      retries: 3
+        condition: service_healthy
 
 networks:
   backend:
 
 volumes:
-  mongo_data:
+  caddy_data:
+  caddy_config:

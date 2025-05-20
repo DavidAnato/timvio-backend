@@ -1,0 +1,14 @@
+# Remplacez example.com par votre domaine
+timvio.zenpilote.fr {
+  reverse_proxy api:3000 {
+    health_path /healthz
+    health_interval 10s
+    health_timeout 2s
+  }
+
+  # Si vous avez des statics dans ./public/static
+  handle_path /static/* {
+    root * /srv/public
+    file_server
+  }
+}

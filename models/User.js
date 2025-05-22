@@ -28,7 +28,19 @@ const userSchema = new mongoose.Schema(
     profession: { type: String },
     bio: { type: String },
     services: [{ type: String }],
+    
+    // STRUCTURE MISE À JOUR POUR LA GÉOLOCALISATION
     location: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point'
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        index: '2dsphere'
+      },
+      // Garder les anciens champs pour compatibilité
       longitude: { type: String },
       latitude: { type: String },
     },
@@ -49,7 +61,7 @@ const userSchema = new mongoose.Schema(
     speciality: {
       type: String,
       required: function() {
-        return this.role === 'provider';
+        return this.role === 'salon';
       }
     },
     address: {
@@ -57,7 +69,7 @@ const userSchema = new mongoose.Schema(
       city: {
         type: String,
         required: function() {
-          return this.role === 'provider';
+          return this.role === 'salon';
         }
       },
       postalCode: String,
@@ -82,13 +94,29 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Mise à jour des index pour inclure le nom du salon
+// Index composé pour la recherche textuelle
 userSchema.index({ 
   firstName: 'text', 
   lastName: 'text', 
   'salon.name': 'text',
-  'address.city': 1, 
-  speciality: 1 
+  bio: 'text',
+  speciality: 'text'
+}, {
+  weights: {
+    'salon.name': 10,
+    firstName: 5,
+    lastName: 5,
+    speciality: 3,
+    bio: 1
+  }
 });
+
+// Index géospatial sur location.coordinates
+userSchema.index({ "location": "2dsphere" });
+
+// Autres index utiles
+userSchema.index({ 'address.city': 1, speciality: 1 });
+userSchema.index({ role: 1, isVerified: 1 });
+userSchema.index({ 'ratings.averageRating': -1 });
 
 module.exports = mongoose.model("User", userSchema);

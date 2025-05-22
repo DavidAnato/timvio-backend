@@ -10,7 +10,7 @@ exports.setAvailability = async (req, res) => {
   try {
     const salonId = req.user.userId; // ID du pro depuis le token
     const { availability } = req.body; // Liste des horaires envoyés
-    console.log(salonId)
+    
     // Vérifier si l'utilisateur est un pro
     const user = await User.findById(salonId);
     if (!user || user.role !== "salon") {
@@ -43,7 +43,7 @@ exports.setAvailability = async (req, res) => {
  */
 exports.addException = async (req, res) => {
   try {
-    const salonId = req.user.id;
+    const salonId = req.user.userId;
     const { date, isAvailable } = req.body;
 
     const avail = await Availability.findOne({ salon: salonId });
@@ -73,7 +73,7 @@ exports.addException = async (req, res) => {
  */
 exports.blockTimeSlot = async (req, res) => {
   try {
-    const salonId = req.user.id;
+    const salonId = req.user.userId;
     const { date, startTime, endTime } = req.body;
 
     const avail = await Availability.findOne({ salon: salonId });
@@ -117,7 +117,7 @@ exports.getAvailability = async (req, res) => {
  */
 exports.deleteAvailability = async (req, res) => {
   try {
-    const salonId = req.user.id;
+    const salonId = req.user.userId;
     
     const avail = await Availability.findOneAndDelete({ salon: salonId });
 

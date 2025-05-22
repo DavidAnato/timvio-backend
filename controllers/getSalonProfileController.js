@@ -10,6 +10,7 @@ const getSalonProfile = async (req, res) => {
     // 1. Récupérer les infos de base du professionnel
     const salon = await User.findById(salonId)
       .select("-password -otp -verificationToken") // Exclure infos sensibles
+      .populate("professionals", "name") // On ajoute ici le champ name uniquement
       .lean();
 
     if (!salon || salon.role !== "salon") {
@@ -39,12 +40,12 @@ const getSalonProfile = async (req, res) => {
       profession: salon.profession,
       speciality: salon.speciality,
       salon: salon.salon,
-      location: salon.location || salon.address,
+      address: salon.address,
+      location: salon.location,
       ratings: salon.ratings,
+      professionals: salon?.professionals || [],
       services,
-      availability: availability?.availability || [],
-      exceptions: availability?.exceptions || [],
-      blockedSlots: availability?.blockedSlots || [],
+      availability,
       reviews,
       createdAt: salon.createdAt,
     };

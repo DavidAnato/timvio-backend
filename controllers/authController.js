@@ -7,15 +7,24 @@ const { sendOTPEmail, sendPasswordResetEmail } = require('../services/emailServi
 // Création de compte
 const register = async (req, res) => {
   try {
-    const { firstName, lastName, email, password, role, phone } = req.body;
+    const { firstName, lastName, email, password, role, phone, salonName } = req.body;
 
-    // Validation des champs
-    if (!firstName || !lastName || !email || !password) {
-      return res.status(400).json({ message: "Tous les champs obligatoires doivent être remplis" });
+    // Validation des champs en fonction du rôle
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email et mot de passe sont obligatoires" });
     }
 
     if (!validator.isEmail(email)) {
       return res.status(400).json({ message: "Format d'email invalide" });
+    }
+
+    // Validation spécifique au rôle
+    if (role === 'client' && (!firstName || !lastName)) {
+      return res.status(400).json({ message: "Prénom et nom sont obligatoires pour un client" });
+    }
+
+    if (role === 'salon' && !salonName) {
+      return res.status(400).json({ message: "Le nom du salon est obligatoire" });
     }
 
     // Vérifier si l'utilisateur existe déjà
@@ -28,15 +37,27 @@ const register = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Création de l'utilisateur
-    const user = await User.create({
-      firstName,
-      lastName,
+    // Préparation des données utilisateur
+    const userData = {
       email,
       password: hashedPassword,
-      role,
+      role: role || 'client', // Par défaut, le rôle est client
       phone
-    });
+    };
+
+    // Ajouter les champs spécifiques au rôle
+    if (role === 'client') {
+      userData.firstName = firstName;
+      userData.lastName = lastName;
+    } else if (role === 'salon') {
+      // Pour les salons, on utilise la structure nested 'salon.name'
+      userData.salon = {
+        name: salonName
+      };
+    }
+
+    // Création de l'utilisateur
+    const user = await User.create(userData);
 
     // Générer OTP
     const otp = Math.floor(10000 + Math.random() * 90000).toString();
@@ -61,6 +82,7 @@ const register = async (req, res) => {
     res.status(500).json({ message: "Erreur lors de la création du compte", error: error.message });
   }
 };
+
 
 // Nouvelle fonction pour vérifier l'OTP
 const verifyOTP = async (req, res) => {

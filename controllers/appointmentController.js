@@ -11,20 +11,26 @@ const Professional = require('../models/Professional');
  */
 const createAppointment = async (req, res) => {
   try {
-    const { salonId, serviceId, professionalId, date, startTime, endTime, notes } = req.body;
+    const { salonId, serviceId, professionalId, date, startTime, notes } = req.body;
     const clientId = req.user.userId;
-
+    
     // Vérifier que le salon existe
     const salon = await User.findOne({ _id: salonId, role: 'salon' });
     if (!salon) {
       return res.status(404).json({ message: "Salon non trouvé" });
     }
-
+    
     // Vérifier que le service existe
     const service = await Service.findById(serviceId);
     if (!service) {
       return res.status(404).json({ message: "Service non trouvé" });
     }
+    
+    // Calculer l'heure de fin en ajoutant la durée du service à l'heure de début
+    const endTime = calculateEndTime(startTime, service.duration);
+    console.log("startTime:", startTime);
+    console.log("service.duration:", service.duration);
+    console.log("endTime calculé:", endTime);
 
     // Vérifier que le professionnel existe
     const professional = await Professional.findById(professionalId);
@@ -38,14 +44,42 @@ const createAppointment = async (req, res) => {
       return res.status(404).json({ message: "Client non trouvé" });
     }
 
+    console.log("date reçue : ", date);
+    
+    // Corriger la conversion de la date
+    let appointmentDate;
+    
+    // Vérifier si date est au format "jour de semaine + jour + mois"
+    if (typeof date === 'string' && date.match(/[A-Za-zÀ-ÿ]+\s+\d+\s+[A-Za-zÀ-ÿ]+/)) {
+      // Extraire les parties de la date
+      const parts = date.split(' ');
+      const day = parseInt(parts[1], 10);
+      const month = getMonthNumber(parts[2]);
+      const year = new Date().getFullYear();
+      
+      appointmentDate = new Date(year, month, day);
+      console.log(`Date convertie: ${day}/${month}/${year} =>`, appointmentDate);
+    } else {
+      // Essayer de parser normalement
+      appointmentDate = new Date(date);
+    }
+    
+    console.log("appointmentDate après conversion: ", appointmentDate);
+    
+    // Vérifier si la date est valide
+    if (isNaN(appointmentDate.getTime())) {
+      return res.status(400).json({ message: "Format de date invalide" });
+    }
+
     // Vérifier que la date est dans le futur
-    const appointmentDate = new Date(date);
-    if (appointmentDate < new Date()) {
+    const now = new Date();
+    if (appointmentDate < now) {
       return res.status(400).json({ message: "La date doit être dans le futur" });
     }
 
     // Vérifier que le créneau est disponible pour le salon
     const dayOfWeek = appointmentDate.getDay();
+    console.log("dayOfWeek : ", dayOfWeek);
     const availability = await Availability.findOne({ salon: salonId });
     
     if (!availability) {
@@ -64,8 +98,8 @@ const createAppointment = async (req, res) => {
     // Vérifier les créneaux bloqués du salon
     const blockedSlot = availability.blockedSlots.find(slot => 
       slot.date.toDateString() === appointmentDate.toDateString() &&
-      slot.startTime <= startTime &&
-      slot.endTime >= endTime
+      compareTimeStrings(slot.startTime, startTime) <= 0 &&
+      compareTimeStrings(slot.endTime, endTime) >= 0
     );
     
     if (blockedSlot) {
@@ -74,25 +108,34 @@ const createAppointment = async (req, res) => {
 
     // Vérifier les horaires d'ouverture du salon
     const dayAvailability = availability.availability.find(a => a.dayOfWeek === dayOfWeek);
+    console.log("startTime : ", startTime);
+    console.log("endTime : ", endTime);
+    console.log("dayAvailability : ", dayAvailability);
+    
     if (!dayAvailability) {
       return res.status(400).json({ message: "Le salon n'a pas défini d'horaires pour ce jour" });
     }
 
     // Vérifier si le jour est disponible
-    const slotAvailable = dayAvailability.slots.some(slot => {
-      return startTime >= slot.startTime && endTime <= slot.endTime && slot.isAvailable;
+    const slotAvailable = dayAvailability.timeSlots.some(slot => {
+      return compareTimeStrings(startTime, slot.startTime) >= 0 && 
+             compareTimeStrings(endTime, slot.endTime) <= 0;
     });
 
     if (!slotAvailable) {
       return res.status(400).json({ message: "Le créneau demandé n'est pas disponible pour ce salon" });
     }
 
+    // Créer une copie de la date pour éviter des problèmes avec setHours
+    const appointmentDateStart = new Date(appointmentDate);
+    const appointmentDateEnd = new Date(appointmentDate);
+
     // Vérifier les conflits avec d'autres rendez-vous pour le même professionnel
     const professionalExistingAppointment = await Appointment.findOne({
       professional: professionalId,
       date: {
-        $gte: new Date(appointmentDate.setHours(0, 0, 0, 0)),
-        $lt: new Date(appointmentDate.setHours(23, 59, 59, 999))
+        $gte: new Date(appointmentDateStart.setHours(0, 0, 0, 0)),
+        $lt: new Date(appointmentDateEnd.setHours(23, 59, 59, 999))
       },
       status: { $nin: ['canceled', 'completed'] },
       $or: [
@@ -112,12 +155,16 @@ const createAppointment = async (req, res) => {
       });
     }
 
+    // Réinitialiser les copies de date
+    appointmentDateStart.setTime(appointmentDate.getTime());
+    appointmentDateEnd.setTime(appointmentDate.getTime());
+
     // Vérifier les conflits avec d'autres rendez-vous pour le salon
     const salonExistingAppointment = await Appointment.findOne({
       salon: salonId,
       date: {
-        $gte: new Date(appointmentDate.setHours(0, 0, 0, 0)),
-        $lt: new Date(appointmentDate.setHours(23, 59, 59, 999))
+        $gte: new Date(appointmentDateStart.setHours(0, 0, 0, 0)),
+        $lt: new Date(appointmentDateEnd.setHours(23, 59, 59, 999))
       },
       status: { $nin: ['canceled', 'completed'] },
       $or: [
@@ -168,48 +215,146 @@ const createAppointment = async (req, res) => {
   }
 };
 
+
+// Fonction pour convertir le nom de mois en numéro (0-11)
+function getMonthNumber(monthName) {
+  const months = {
+    'janvier': 0,
+    'février': 1, 'fevrier': 1,
+    'mars': 2,
+    'avril': 3,
+    'mai': 4,
+    'juin': 5,
+    'juillet': 6,
+    'août': 7, 'aout': 7,
+    'septembre': 8,
+    'octobre': 9,
+    'novembre': 10,
+    'décembre': 11, 'decembre': 11
+  };
+  
+  return months[monthName.toLowerCase()] || 0; // Par défaut janvier si mois non reconnu
+}
+
 /**
- * @desc Obtenir les rendez-vous d'un utilisateur
+ * Calcule l'heure de fin en ajoutant la durée (en minutes) à l'heure de début
+ * @param {string} startTime - Format "HH:MM"
+ * @param {number} durationMinutes - Durée en minutes
+ * @returns {string} - Heure de fin au format "HH:MM"
+ */
+function calculateEndTime(startTime, durationMinutes) {
+  // Vérifier le format de startTime
+  if (!startTime || typeof startTime !== 'string') {
+    console.error("Format d'heure de début invalide:", startTime);
+    return "00:00";
+  }
+
+  try {
+    // Extraire les heures et minutes
+    const [hours, minutes] = startTime.split(':').map(num => parseInt(num, 10));
+    
+    // Créer un objet Date pour faciliter le calcul
+    const date = new Date();
+    date.setHours(hours || 0);
+    date.setMinutes(minutes || 0);
+    
+    // Ajouter la durée en minutes
+    date.setMinutes(date.getMinutes() + (durationMinutes || 0));
+    
+    // Formater le résultat
+    const newHours = date.getHours().toString().padStart(2, '0');
+    const newMinutes = date.getMinutes().toString().padStart(2, '0');
+    
+    return `${newHours}:${newMinutes}`;
+  } catch (error) {
+    console.error("Erreur lors du calcul de l'heure de fin:", error);
+    return "00:00";
+  }
+}
+
+/**
+ * Compare deux chaînes de temps au format "HH:MM"
+ * @param {string} time1 - Premier temps à comparer
+ * @param {string} time2 - Deuxième temps à comparer
+ * @returns {number} - -1 si time1 < time2, 0 si égaux, 1 si time1 > time2
+ */
+function compareTimeStrings(time1, time2) {
+  if (!time1 || !time2) return 0;
+  
+  const [hours1, minutes1] = time1.split(':').map(num => parseInt(num, 10));
+  const [hours2, minutes2] = time2.split(':').map(num => parseInt(num, 10));
+  
+  if (hours1 < hours2) return -1;
+  if (hours1 > hours2) return 1;
+  if (minutes1 < minutes2) return -1;
+  if (minutes1 > minutes2) return 1;
+  return 0;
+}
+
+/**
+ * @desc Obtenir les rendez-vous d'un utilisateur avec pagination
  * @route GET /api/appointments
  * @access Private
  */
 const getAppointments = async (req, res) => {
   try {
-    const userId = req.user.userId;
-    const { role } = req.user;
-    const { status, upcoming } = req.query;
+      const {
+          status,
+          upcoming,
+          page = 1,
+          limit = 10
+      } = req.query;
 
-    // Construire le filtre en fonction du rôle
-    const filter = {};
-    if (role === 'client') {
-      filter.client = userId;
-    } else if (role === 'salon') {
-      filter.salon = userId;
-    } else if (role === 'professional') {
-      filter.professional = userId;
-    }
+      const { userId, role } = req.user;
 
-    // Filtrer par statut si spécifié
-    if (status) {
-      filter.status = status;
-    }
+      const filter = {};
 
-    // Filtrer les rendez-vous à venir si spécifié
-    if (upcoming === 'true') {
-      filter.date = { $gte: new Date() };
-    }
+      // Appliquer les rôles
+      if (role === 'client') {
+          filter.client = userId;
+      } else if (role === 'salon') {
+          filter.salon = userId;
+      } else if (role === 'professional') {
+          filter.professional = userId;
+      }
 
-    const appointments = await Appointment.find(filter)
-      .populate('client', 'firstName lastName profilePicture')
-      .populate('salon', 'firstName lastName profilePicture salon')
-      .populate('service', 'name duration price')
-      .populate('professional', 'name')
-      .sort({ date: 1, startTime: 1 });
+      // Filtrer par statut
+      if (status) {
+          filter.status = status;
+      }
 
-    res.status(200).json(appointments);
+      // Filtrer les rendez-vous à venir
+      if (upcoming === 'true') {
+          filter.date = { $gte: new Date() };
+      }
+
+      const skip = (page - 1) * limit;
+
+      const total = await Appointment.countDocuments(filter);
+
+      const appointments = await Appointment.find(filter)
+          .populate('client', 'firstName lastName profilePicture')
+          .populate('salon', 'firstName lastName profilePicture salon address')
+          .populate('service', 'name duration price')
+          .populate('professional', 'name')
+          .sort({ date: 1, startTime: 1 })
+          .skip(skip)
+          .limit(parseInt(limit));
+
+      res.status(200).json({
+          appointments,
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(total / limit),
+          totalResults: total
+      });
+
   } catch (error) {
-    res.status(500).json({ message: "Erreur lors de la récupération des rendez-vous", error: error.message });
+      res.status(500).json({ message: "Erreur lors de la récupération des rendez-vous", error: error.message });
   }
+};
+
+module.exports = {
+  getAppointments
 };
 
 /**

@@ -9,7 +9,7 @@ const { auth } = require('../middlewares/authMiddleware');
 
 /**
  * @swagger
- * /api/appointments:
+ * /api/appointments/create:
  *   post:
  *     summary: Créer un nouveau rendez-vous
  *     tags: [Appointments]
@@ -56,7 +56,7 @@ const { auth } = require('../middlewares/authMiddleware');
  *       500:
  *         description: Erreur serveur
  */
-router.post('/', auth, createAppointment);
+router.post('/create', auth, createAppointment);
 
 /**
  * @swagger

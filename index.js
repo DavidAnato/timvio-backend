@@ -13,6 +13,7 @@ const serviceRoutes = require('./routes/serviceRoutes');
 const salonRoutes = require('./routes/SalonRoutes');
 const userRoute = require('./routes/userRoute');
 const appointmentRoutes = require('./routes/appointmentRoutes');
+const professionalRoutes = require('./routes/professionalRoutes');
 
 // Configuration
 dotenv.config();
@@ -33,6 +34,7 @@ app.use('/api/services', serviceRoutes);
 app.use('/api/salons', salonRoutes);
 app.use('/api/users', userRoute);
 app.use('/api/appointments', appointmentRoutes);
+app.use('/api/professionals', professionalRoutes);
 
 // Connexion MongoDB
 mongoose.connect(process.env.MONGODB_URI)

@@ -2,8 +2,16 @@ const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema(
   {
-    firstName: { type: String, required: true },
-    lastName: { type: String, required: true },
+    firstName: { type: String, 
+          required: function() {
+          return this.role === 'client';
+        }
+     },
+    lastName: { type: String, 
+          required: function() {
+          return this.role === 'client';
+        }
+     },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     phone: { type: String },
@@ -21,9 +29,8 @@ const userSchema = new mongoose.Schema(
     bio: { type: String },
     services: [{ type: String }],
     location: {
-      address: { type: String },
-      city: { type: String },
-      country: { type: String },
+      longitude: { type: String },
+      latitude: { type: String },
     },
 
     ratings: {
@@ -67,9 +74,9 @@ const userSchema = new mongoose.Schema(
       description: String,
       images: [String]
     },
-    professionels: [{
+    professionals: [{
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Professionel",
+      ref: "Professional",
     }],
   },
   { timestamps: true }

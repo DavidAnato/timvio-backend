@@ -30,7 +30,7 @@ const { register, login, verifyOTP, resendOTP, forgotPassword, resetPassword, ch
  *                 type: string
  *               role:
  *                 type: string
- *                 enum: [client, professional, admin]
+ *                 enum: [client, salon, admin]
  *     responses:
  *       201:
  *         description: Compte créé avec succès

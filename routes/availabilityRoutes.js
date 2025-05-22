@@ -106,17 +106,17 @@ const { auth, protect, authorize } = require("../middlewares/authMiddleware"); /
  *         500:
  *           description: Erreur serveur
  * 
- *   /api/availability/{professionalId}:
+ *   /api/availability/{salonId}:
  *     get:
  *       summary: Récupérer la disponibilité d'un professionnel
  *       tags: [Disponibilités]
  *       parameters:
  *         - in: path
- *           name: professionalId
+ *           name: salonId
  *           schema:
  *             type: string
  *           required: true
- *           description: ID du professionnel
+ *           description: ID du salon
  *       responses:
  *         200:
  *           description: Disponibilité récupérée
@@ -125,10 +125,10 @@ const { auth, protect, authorize } = require("../middlewares/authMiddleware"); /
  *         500:
  *           description: Erreur serveur
  */
-router.post("/", auth, protect, authorize("professional"), setAvailability);
-router.post("/exception", protect, authorize("professional"), addException);
-router.post("/block", protect, authorize("professional"), blockTimeSlot);
-router.get("/:professionalId", getAvailability);
-router.delete("/", protect, authorize("professional"), deleteAvailability);
+router.post("/", auth, protect, authorize("salon"), setAvailability);
+router.post("/exception", protect, authorize("salon"), addException);
+router.post("/block", protect, authorize("salon"), blockTimeSlot);
+router.get("/:salonId", getAvailability);
+router.delete("/", protect, authorize("salon"), deleteAvailability);
 
 module.exports = router;

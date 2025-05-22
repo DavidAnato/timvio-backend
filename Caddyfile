@@ -1,0 +1,16 @@
+# Remplacez example.com par votre domaine
+timvio.zenpilote.fr {
+  reverse_proxy api:3000 {
+    health_uri    /healthz
+    health_interval 30s
+    health_timeout 5s
+    health_status 200
+  }
+
+  # Logging for debugging
+  log {
+    output stdout
+    format console
+    level DEBUG
+  }
+}

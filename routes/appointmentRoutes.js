@@ -22,15 +22,18 @@ const { auth } = require('../middlewares/authMiddleware');
  *           schema:
  *             type: object
  *             required:
- *               - professionalId
+ *               - salonId
  *               - serviceId
+ *               - professionalId
  *               - date
  *               - startTime
  *               - endTime
  *             properties:
- *               professionalId:
+ *               salonId:
  *                 type: string
  *               serviceId:
+ *                 type: string
+ *               professionalId:
  *                 type: string
  *               date:
  *                 type: string

@@ -2,22 +2,22 @@ const Availability = require("../models/Availability");
 const User = require("../models/User");
 
 /**
- * @desc Créer ou mettre à jour la disponibilité d'un professionnel
+ * @desc Créer ou mettre à jour la disponibilité d'un salon
  * @route POST /api/availability
- * @access Private (Professional)
+ * @access Private (salon)
  */
 exports.setAvailability = async (req, res) => {
   try {
-    const professionalId = req.user.userId; // ID du pro depuis le token
+    const salonId = req.user.userId; // ID du pro depuis le token
     const { availability } = req.body; // Liste des horaires envoyés
-    console.log(professionalId)
+    console.log(salonId)
     // Vérifier si l'utilisateur est un pro
-    const user = await User.findById(professionalId);
-    if (!user || user.role !== "professional") {
+    const user = await User.findById(salonId);
+    if (!user || user.role !== "salon") {
       return res.status(403).json({ message: "Accès interdit." });
     }
 
-    let avail = await Availability.findOne({ professional: professionalId });
+    let avail = await Availability.findOne({ salon: salonId });
 
     if (avail) {
       // Mise à jour des disponibilités existantes
@@ -25,7 +25,7 @@ exports.setAvailability = async (req, res) => {
       await avail.save();
     } else {
       // Création de la disponibilité
-      avail = await Availability.create({ professional: professionalId, availability });
+      avail = await Availability.create({ salon: salonId, availability });
       user.availability = avail._id; // Associer au User
       await user.save();
     }
@@ -39,14 +39,14 @@ exports.setAvailability = async (req, res) => {
 /**
  * @desc Ajouter une exception (ex : jour férié, congé)
  * @route POST /api/availability/exception
- * @access Private (Professional)
+ * @access Private (salon)
  */
 exports.addException = async (req, res) => {
   try {
-    const professionalId = req.user.id;
+    const salonId = req.user.id;
     const { date, isAvailable } = req.body;
 
-    const avail = await Availability.findOne({ professional: professionalId });
+    const avail = await Availability.findOne({ salon: salonId });
     if (!avail) {
       return res.status(404).json({ message: "Disponibilité non trouvée." });
     }
@@ -69,14 +69,14 @@ exports.addException = async (req, res) => {
 /**
  * @desc Bloquer un créneau spécifique
  * @route POST /api/availability/block
- * @access Private (Professional)
+ * @access Private (salon)
  */
 exports.blockTimeSlot = async (req, res) => {
   try {
-    const professionalId = req.user.id;
+    const salonId = req.user.id;
     const { date, startTime, endTime } = req.body;
 
-    const avail = await Availability.findOne({ professional: professionalId });
+    const avail = await Availability.findOne({ salon: salonId });
     if (!avail) {
       return res.status(404).json({ message: "Disponibilité non trouvée." });
     }
@@ -92,13 +92,13 @@ exports.blockTimeSlot = async (req, res) => {
 
 /**
  * @desc Récupérer la disponibilité d'un professionnel
- * @route GET /api/availability/:professionalId
+ * @route GET /api/availability/:salonId
  * @access Public
  */
 exports.getAvailability = async (req, res) => {
   try {
-    const { professionalId } = req.params;
-    const avail = await Availability.findOne({ professional: professionalId });
+    const { salonId } = req.params;
+    const avail = await Availability.findOne({ salon: salonId });
 
     if (!avail) {
       return res.status(404).json({ message: "Disponibilité non trouvée." });
@@ -113,20 +113,20 @@ exports.getAvailability = async (req, res) => {
 /**
  * @desc Supprimer complètement une disponibilité
  * @route DELETE /api/availability
- * @access Private (Professional)
+ * @access Private (salon)
  */
 exports.deleteAvailability = async (req, res) => {
   try {
-    const professionalId = req.user.id;
+    const salonId = req.user.id;
     
-    const avail = await Availability.findOneAndDelete({ professional: professionalId });
+    const avail = await Availability.findOneAndDelete({ salon: salonId });
 
     if (!avail) {
       return res.status(404).json({ message: "Disponibilité non trouvée." });
     }
 
     // Supprimer la référence dans le User
-    await User.findByIdAndUpdate(professionalId, { $unset: { availability: 1 } });
+    await User.findByIdAndUpdate(salonId, { $unset: { availability: 1 } });
 
     res.status(200).json({ message: "Disponibilité supprimée." });
   } catch (error) {

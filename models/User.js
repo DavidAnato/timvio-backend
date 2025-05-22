@@ -7,7 +7,7 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     phone: { type: String },
-    role: { type: String, enum: ["client", "professional", "admin"], default: "client" },
+    role: { type: String, enum: ["client", "salon", "admin"], default: "client" },
     profilePicture: { type: String },
     isVerified: { type: Boolean, default: false },
     otp: {
@@ -61,12 +61,16 @@ const userSchema = new mongoose.Schema(
       name: { 
         type: String,
         required: function() {
-          return this.role === 'professional';
+          return this.role === 'salon';
         }
       },
       description: String,
       images: [String]
     },
+    professionels: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Professionel",
+    }],
   },
   { timestamps: true }
 );

@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 
 const serviceSchema = new mongoose.Schema({
-  professional: { 
+  salon: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: "User", 
     required: true 
@@ -24,7 +24,9 @@ const serviceSchema = new mongoose.Schema({
     min: 0 
   },
   category: { 
-    type: String 
+    type: String,
+    enum: ["homme", "femme", "enfant"],
+    required: true
   },
   isActive: { 
     type: Boolean, 

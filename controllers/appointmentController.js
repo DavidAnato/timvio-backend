@@ -3,7 +3,7 @@ const User = require('../models/User');
 const Availability = require('../models/Availability');
 const Service = require('../models/Service');
 const Professional = require('../models/Professional');
-
+const { createNotification } = require('../utils/createNotification'); // Import mis à jour
 /**
  * @desc Créer un nouveau rendez-vous
  * @route POST /api/appointments
@@ -28,9 +28,7 @@ const createAppointment = async (req, res) => {
     
     // Calculer l'heure de fin en ajoutant la durée du service à l'heure de début
     const endTime = calculateEndTime(startTime, service.duration);
-    console.log("startTime:", startTime);
-    console.log("service.duration:", service.duration);
-    console.log("endTime calculé:", endTime);
+
 
     // Vérifier que le professionnel existe
     const professional = await Professional.findById(professionalId);
@@ -44,7 +42,6 @@ const createAppointment = async (req, res) => {
       return res.status(404).json({ message: "Client non trouvé" });
     }
 
-    console.log("date reçue : ", date);
     
     // Corriger la conversion de la date
     let appointmentDate;
@@ -63,9 +60,7 @@ const createAppointment = async (req, res) => {
       // Essayer de parser normalement
       appointmentDate = new Date(date);
     }
-    
-    console.log("appointmentDate après conversion: ", appointmentDate);
-    
+        
     // Vérifier si la date est valide
     if (isNaN(appointmentDate.getTime())) {
       return res.status(400).json({ message: "Format de date invalide" });
@@ -108,9 +103,6 @@ const createAppointment = async (req, res) => {
 
     // Vérifier les horaires d'ouverture du salon
     const dayAvailability = availability.availability.find(a => a.dayOfWeek === dayOfWeek);
-    console.log("startTime : ", startTime);
-    console.log("endTime : ", endTime);
-    console.log("dayAvailability : ", dayAvailability);
     
     if (!dayAvailability) {
       return res.status(400).json({ message: "Le salon n'a pas défini d'horaires pour ce jour" });
@@ -205,6 +197,37 @@ const createAppointment = async (req, res) => {
 
     await availability.save();
 
+    // Créer une notification pour le client
+  await createNotification(
+    "Rendez-vous programmé", 
+    `Votre rendez-vous avec ${professional.name} a été programmé le ${appointmentDate.toLocaleDateString()} à ${startTime}`, 
+    clientId,
+    {
+      appointmentId: appointment._id.toString(),
+      type: 'appointment_created',
+      professionalName: professional.name,
+      salonName: salon.businessName || salon.firstName,
+      date: appointmentDate.toISOString(),
+      startTime: startTime
+    }
+  );
+
+    // Créer une notification pour le salon
+  await createNotification(
+    "Nouveau rendez-vous", 
+    `${client.firstName} ${client.lastName} a programmé un rendez-vous avec ${professional.name} le ${appointmentDate.toLocaleDateString()} à ${startTime}`, 
+    salonId,
+    {
+      appointmentId: appointment._id.toString(),
+      type: 'appointment_booked',
+      clientName: `${client.firstName} ${client.lastName}`,
+      professionalName: professional.name,
+      date: appointmentDate.toISOString(),
+      startTime: startTime
+    }
+  );
+        
+    
     res.status(201).json({
       message: "Rendez-vous créé avec succès",
       appointment

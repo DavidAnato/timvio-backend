@@ -2,16 +2,18 @@ const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema(
   {
-    firstName: { type: String, 
-          required: function() {
-          return this.role === 'client';
-        }
-     },
-    lastName: { type: String, 
-          required: function() {
-          return this.role === 'client';
-        }
-     },
+    firstName: { 
+      type: String, 
+      required: function() {
+        return this.role === 'client';
+      }
+    },
+    lastName: { 
+      type: String, 
+      required: function() {
+        return this.role === 'client';
+      }
+    },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     phone: { type: String },
@@ -27,18 +29,24 @@ const userSchema = new mongoose.Schema(
     // Champs spécifiques aux professionnels
     profession: { type: String },
     bio: { type: String },
-    services: [{ type: String }],
+    services: { type: [String], default: [] },
     
-    // STRUCTURE MISE À JOUR POUR LA GÉOLOCALISATION
+    // STRUCTURE CORRIGÉE POUR LA GÉOLOCALISATION
     location: {
       type: {
         type: String,
         enum: ['Point'],
-        default: 'Point'
+        // CORRECTION : Ne pas avoir de default si le champ parent n'est pas requis
       },
       coordinates: {
         type: [Number], // [longitude, latitude]
-        index: '2dsphere'
+        // L'index sera créé séparément
+        validate: {
+          validator: function(coords) {
+            return coords && coords.length === 2;
+          },
+          message: 'Les coordonnées doivent être un tableau de 2 nombres [longitude, latitude]'
+        }
       },
       // Garder les anciens champs pour compatibilité
       longitude: { type: String },
@@ -84,15 +92,31 @@ const userSchema = new mongoose.Schema(
         }
       },
       description: String,
-      images: [String]
+      images: { type: [String], default: [] }
     },
     professionals: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: "Professional",
+      default: []
     }],
   },
   { timestamps: true }
 );
+
+// CORRECTION : Middleware pre-save pour gérer la géolocalisation
+userSchema.pre('save', function(next) {
+  // Si location est définie mais sans coordonnées valides, la supprimer
+  if (this.location && (!this.location.coordinates || this.location.coordinates.length !== 2)) {
+    this.location = undefined;
+  }
+  
+  // Si location.coordinates existe, s'assurer que type est défini
+  if (this.location && this.location.coordinates) {
+    this.location.type = 'Point';
+  }
+  
+  next();
+});
 
 // Index composé pour la recherche textuelle
 userSchema.index({ 
@@ -111,12 +135,24 @@ userSchema.index({
   }
 });
 
-// Index géospatial sur location.coordinates
-userSchema.index({ "location": "2dsphere" });
+// CORRECTION : Index géospatial conditionnel - seulement sur les documents qui ont location
+userSchema.index({ 
+  "location": "2dsphere" 
+}, { 
+  sparse: true // IMPORTANT : sparse=true pour ignorer les documents sans location
+});
 
 // Autres index utiles
 userSchema.index({ 'address.city': 1, speciality: 1 });
 userSchema.index({ role: 1, isVerified: 1 });
 userSchema.index({ 'ratings.averageRating': -1 });
+
+// Méthode helper pour ajouter la géolocalisation plus tard
+userSchema.methods.setLocation = function(longitude, latitude) {
+  this.location = {
+    type: 'Point',
+    coordinates: [parseFloat(longitude), parseFloat(latitude)]
+  };
+};
 
 module.exports = mongoose.model("User", userSchema);

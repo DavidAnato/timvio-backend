@@ -126,8 +126,8 @@ const { auth, protect, authorize } = require("../middlewares/authMiddleware"); /
  *           description: Erreur serveur
  */
 router.post("/", auth, protect, authorize("salon"), setAvailability);
-router.post("/exception", protect, authorize("salon"), addException);
-router.post("/block", protect, authorize("salon"), blockTimeSlot);
+router.post("/exception", auth, protect, authorize("salon"), addException);
+router.post("/block", auth, protect, authorize("salon"), blockTimeSlot);
 router.get("/:salonId", getAvailability);
 router.delete("/", protect, authorize("salon"), deleteAvailability);
 

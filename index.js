@@ -11,10 +11,12 @@ const authRoutes = require('./routes/authRoutes');
 const availabilityRoutes = require('./routes/availabilityRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
 const salonRoutes = require('./routes/SalonRoutes');
-const userRoute = require('./routes/userRoute');
+const userRoutes = require('./routes/userRoutes');
 const appointmentRoutes = require('./routes/appointmentRoutes');
 const professionalRoutes = require('./routes/professionalRoutes');
-
+const reviewRoutes = require('./routes/reviewRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const { initializeNotificationService } = require('./services/appointmentNotifications');
 // Configuration
 dotenv.config();
 const app = express();
@@ -32,10 +34,11 @@ app.use('/api/auth', authRoutes);
 app.use('/api/availability', availabilityRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/salons', salonRoutes);
-app.use('/api/users', userRoute);
+app.use('/api/users', userRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/professionals', professionalRoutes);
-
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/notifications', notificationRoutes);
 // Connexion MongoDB
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('Connecté à MongoDB'))
@@ -43,6 +46,13 @@ mongoose.connect(process.env.MONGODB_URI)
 
 // Port
 const PORT = process.env.PORT || 5000;
+
+
+
+// Au démarrage de votre serveur
+initializeNotificationService();
+
+
 app.listen(PORT, () => {
   console.log(`Serveur démarré sur le port ${PORT}`);
 });

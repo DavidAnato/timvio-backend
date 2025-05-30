@@ -41,7 +41,7 @@ const register = async (req, res) => {
     const userData = {
       email,
       password: hashedPassword,
-      role: role || 'client', // Par défaut, le rôle est client
+      role: role || 'client',
       phone
     };
 
@@ -49,12 +49,24 @@ const register = async (req, res) => {
     if (role === 'client') {
       userData.firstName = firstName;
       userData.lastName = lastName;
+      // Pour les clients, pas besoin de location obligatoire
     } else if (role === 'salon') {
       // Pour les salons, on utilise la structure nested 'salon.name'
       userData.salon = {
         name: salonName
       };
+      
+      // CORRECTION : Initialiser location avec des coordonnées par défaut
+      // ou ne pas inclure location du tout si pas de géolocalisation
+      // userData.location = {
+      //   type: 'Point',
+      //   coordinates: [0, 0] // [longitude, latitude] par défaut
+      // };
     }
+
+    // CORRECTION PRINCIPALE : Ne pas inclure location si pas de coordonnées
+    // Le schéma a un index géospatial, mais le champ n'est pas required
+    // Donc on peut créer des users sans location
 
     // Création de l'utilisateur
     const user = await User.create(userData);
@@ -79,10 +91,15 @@ const register = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({ message: "Erreur lors de la création du compte", error: error.message });
+    console.error('Erreur détaillée:', error);
+    res.status(500).json({ 
+      message: "Erreur lors de la création du compte", 
+      error: error.message,
+      // En développement seulement, retirer en production
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
-
 
 // Nouvelle fonction pour vérifier l'OTP
 const verifyOTP = async (req, res) => {

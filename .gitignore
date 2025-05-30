@@ -30,4 +30,11 @@ coverage/
 
 # Temporary files
 *.tmp
-*.temp 
+*.temp
+
+# Docker
+.docker
+docker-compose.override.yml
+
+# MongoDB data
+mongodb_data/ 

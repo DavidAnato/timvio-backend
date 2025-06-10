@@ -26,7 +26,8 @@ const serviceSchema = new mongoose.Schema({
   category: { 
     type: String,
     enum: ["homme", "femme", "enfant"],
-    required: true
+    required: true,
+    set: (v) => v.toLowerCase(),
   },
   isActive: { 
     type: Boolean, 

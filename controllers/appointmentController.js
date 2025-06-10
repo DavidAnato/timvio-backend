@@ -1,9 +1,10 @@
 const Appointment = require('../models/Appointment');
 const User = require('../models/User');
-const Availability = require('../models/Availability');
+const { ProfessionalAvailability } = require('../models/Availability');
 const Service = require('../models/Service');
 const Professional = require('../models/Professional');
-const { createNotification } = require('../utils/createNotification'); // Import mis à jour
+const { createNotification } = require('../utils/createNotification');
+
 /**
  * @desc Créer un nouveau rendez-vous
  * @route POST /api/appointments
@@ -11,7 +12,17 @@ const { createNotification } = require('../utils/createNotification'); // Import
  */
 const createAppointment = async (req, res) => {
   try {
-    const { salonId, serviceId, professionalId, date, startTime, notes } = req.body;
+    const { 
+      salonId, 
+      serviceId, 
+      professionalId, 
+      date, 
+      startTime, 
+      notes,
+      paymentType, // 'deposit' ou 'on_site'
+      paymentIntentId // Si paiement d'acompte
+    } = req.body;
+    
     const clientId = req.user.userId;
     
     // Vérifier que le salon existe
@@ -29,7 +40,6 @@ const createAppointment = async (req, res) => {
     // Calculer l'heure de fin en ajoutant la durée du service à l'heure de début
     const endTime = calculateEndTime(startTime, service.duration);
 
-
     // Vérifier que le professionnel existe
     const professional = await Professional.findById(professionalId);
     if (!professional) {
@@ -42,7 +52,6 @@ const createAppointment = async (req, res) => {
       return res.status(404).json({ message: "Client non trouvé" });
     }
 
-    
     // Corriger la conversion de la date
     let appointmentDate;
     
@@ -72,50 +81,24 @@ const createAppointment = async (req, res) => {
       return res.status(400).json({ message: "La date doit être dans le futur" });
     }
 
-    // Vérifier que le créneau est disponible pour le salon
-    const dayOfWeek = appointmentDate.getDay();
-    console.log("dayOfWeek : ", dayOfWeek);
-    const availability = await Availability.findOne({ salon: salonId });
-    
-    if (!availability) {
-      return res.status(400).json({ message: "Le salon n'a pas défini de disponibilités" });
-    }
-
-    // Vérifier les exceptions du salon
-    const exception = availability.exceptions.find(ex => 
-      ex.date.toDateString() === appointmentDate.toDateString()
-    );
-    
-    if (exception && !exception.isAvailable) {
-      return res.status(400).json({ message: "Le salon n'est pas disponible à cette date" });
-    }
-
-    // Vérifier les créneaux bloqués du salon
-    const blockedSlot = availability.blockedSlots.find(slot => 
-      slot.date.toDateString() === appointmentDate.toDateString() &&
-      compareTimeStrings(slot.startTime, startTime) <= 0 &&
-      compareTimeStrings(slot.endTime, endTime) >= 0
-    );
-    
-    if (blockedSlot) {
-      return res.status(400).json({ message: "Ce créneau est déjà bloqué" });
-    }
-
-    // Vérifier les horaires d'ouverture du salon
-    const dayAvailability = availability.availability.find(a => a.dayOfWeek === dayOfWeek);
-    
-    if (!dayAvailability) {
-      return res.status(400).json({ message: "Le salon n'a pas défini d'horaires pour ce jour" });
-    }
-
-    // Vérifier si le jour est disponible
-    const slotAvailable = dayAvailability.timeSlots.some(slot => {
-      return compareTimeStrings(startTime, slot.startTime) >= 0 && 
-             compareTimeStrings(endTime, slot.endTime) <= 0;
+    // VÉRIFICATION DES DISPONIBILITÉS DU PROFESSIONNEL
+    // Récupérer les disponibilités du professionnel
+    const professionalAvailability = await ProfessionalAvailability.findOne({ 
+      professional: professionalId,
+      salon: salonId 
     });
+    
+    if (!professionalAvailability) {
+      return res.status(400).json({ message: "Le professionnel n'a pas défini de disponibilités" });
+    }
 
-    if (!slotAvailable) {
-      return res.status(400).json({ message: "Le créneau demandé n'est pas disponible pour ce salon" });
+    // Vérifier si le professionnel est disponible à ce créneau
+    const isAvailable = await professionalAvailability.isAvailableAt(appointmentDate, startTime, endTime);
+    
+    if (!isAvailable) {
+      return res.status(400).json({ 
+        message: "Le professionnel n'est pas disponible à ce créneau" 
+      });
     }
 
     // Créer une copie de la date pour éviter des problèmes avec setHours
@@ -147,34 +130,29 @@ const createAppointment = async (req, res) => {
       });
     }
 
-    // Réinitialiser les copies de date
-    appointmentDateStart.setTime(appointmentDate.getTime());
-    appointmentDateEnd.setTime(appointmentDate.getTime());
+    // GESTION DU PAIEMENT
+    // Déterminer le statut de paiement initial
+    let initialPaymentStatus = 'pending';
+    let paymentId = null;
 
-    // Vérifier les conflits avec d'autres rendez-vous pour le salon
-    const salonExistingAppointment = await Appointment.findOne({
-      salon: salonId,
-      date: {
-        $gte: new Date(appointmentDateStart.setHours(0, 0, 0, 0)),
-        $lt: new Date(appointmentDateEnd.setHours(23, 59, 59, 999))
-      },
-      status: { $nin: ['canceled', 'completed'] },
-      $or: [
-        // vérifie si le nouveau rendez-vous chevauche un existant
-        {
-          $and: [
-            { startTime: { $lt: endTime } },
-            { endTime: { $gt: startTime } }
-          ]
-        }
-      ]
-    });
-
-    if (salonExistingAppointment) {
-      return res.status(400).json({ message: "Ce créneau est déjà réservé dans ce salon" });
+    if (paymentType === 'deposit' && paymentIntentId) {
+      // Vérifier que le paiement a bien été effectué
+      const stripe = require('../config/stripe');
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      
+      if (paymentIntent.status === 'succeeded') {
+        initialPaymentStatus = 'partial'; // Acompte payé
+        paymentId = paymentIntentId;
+      } else {
+        return res.status(400).json({ 
+          message: "Le paiement de l'acompte n'a pas abouti" 
+        });
+      }
+    } else if (paymentType === 'on_site') {
+      initialPaymentStatus = 'pending'; // Paiement sur place
     }
 
-    // Créer le rendez-vous
+    // Créer le rendez-vous avec les informations de paiement
     const appointment = new Appointment({
       client: clientId,
       salon: salonId,
@@ -183,54 +161,59 @@ const createAppointment = async (req, res) => {
       date: appointmentDate,
       startTime,
       endTime,
-      notes
+      notes,
+      paymentStatus: initialPaymentStatus,
+      paymentId: paymentId
     });
 
     await appointment.save();
 
-    // Bloquer le créneau dans les disponibilités du salon
-    availability.blockedSlots.push({
+    // Bloquer le créneau dans les disponibilités du professionnel
+    professionalAvailability.blockedSlots.push({
       date: appointmentDate,
       startTime,
-      endTime
+      endTime,
+      reason: "Rendez-vous programmé"
     });
 
-    await availability.save();
+    await professionalAvailability.save();
 
     // Créer une notification pour le client
-  await createNotification(
-    "Rendez-vous programmé", 
-    `Votre rendez-vous avec ${professional.name} a été programmé le ${appointmentDate.toLocaleDateString()} à ${startTime}`, 
-    clientId,
-    {
-      appointmentId: appointment._id.toString(),
-      type: 'appointment_created',
-      professionalName: professional.name,
-      salonName: salon.businessName || salon.firstName,
-      date: appointmentDate.toISOString(),
-      startTime: startTime
-    }
-  );
+    await createNotification(
+      "Rendez-vous programmé", 
+      `Votre rendez-vous avec ${professional.name} a été programmé le ${appointmentDate.toLocaleDateString()} à ${startTime}`, 
+      clientId,
+      {
+        appointmentId: appointment._id.toString(),
+        type: 'appointment_created',
+        professionalName: professional.name,
+        salonName: salon.businessName || salon.firstName,
+        date: appointmentDate.toISOString(),
+        startTime: startTime
+      }
+    );
 
     // Créer une notification pour le salon
-  await createNotification(
-    "Nouveau rendez-vous", 
-    `${client.firstName} ${client.lastName} a programmé un rendez-vous avec ${professional.name} le ${appointmentDate.toLocaleDateString()} à ${startTime}`, 
-    salonId,
-    {
-      appointmentId: appointment._id.toString(),
-      type: 'appointment_booked',
-      clientName: `${client.firstName} ${client.lastName}`,
-      professionalName: professional.name,
-      date: appointmentDate.toISOString(),
-      startTime: startTime
-    }
-  );
+    await createNotification(
+      "Nouveau rendez-vous", 
+      `${client.firstName} ${client.lastName} a programmé un rendez-vous avec ${professional.name} le ${appointmentDate.toLocaleDateString()} à ${startTime}`, 
+      salonId,
+      {
+        appointmentId: appointment._id.toString(),
+        type: 'appointment_booked',
+        clientName: `${client.firstName} ${client.lastName}`,
+        professionalName: professional.name,
+        date: appointmentDate.toISOString(),
+        startTime: startTime
+      }
+    );
         
-    
     res.status(201).json({
       message: "Rendez-vous créé avec succès",
-      appointment
+      appointment: {
+        ...appointment.toObject(),
+        paymentType: paymentType
+      }
     });
   } catch (error) {
     console.error("Erreur lors de la création du rendez-vous:", error);
@@ -238,81 +221,58 @@ const createAppointment = async (req, res) => {
   }
 };
 
-
-// Fonction pour convertir le nom de mois en numéro (0-11)
-function getMonthNumber(monthName) {
-  const months = {
-    'janvier': 0,
-    'février': 1, 'fevrier': 1,
-    'mars': 2,
-    'avril': 3,
-    'mai': 4,
-    'juin': 5,
-    'juillet': 6,
-    'août': 7, 'aout': 7,
-    'septembre': 8,
-    'octobre': 9,
-    'novembre': 10,
-    'décembre': 11, 'decembre': 11
-  };
-  
-  return months[monthName.toLowerCase()] || 0; // Par défaut janvier si mois non reconnu
-}
-
 /**
- * Calcule l'heure de fin en ajoutant la durée (en minutes) à l'heure de début
- * @param {string} startTime - Format "HH:MM"
- * @param {number} durationMinutes - Durée en minutes
- * @returns {string} - Heure de fin au format "HH:MM"
+ * @desc Compléter le paiement du solde restant
+ * @route POST /api/appointments/:id/complete-payment
+ * @access Private
  */
-function calculateEndTime(startTime, durationMinutes) {
-  // Vérifier le format de startTime
-  if (!startTime || typeof startTime !== 'string') {
-    console.error("Format d'heure de début invalide:", startTime);
-    return "00:00";
-  }
-
+const completePayment = async (req, res) => {
   try {
-    // Extraire les heures et minutes
-    const [hours, minutes] = startTime.split(':').map(num => parseInt(num, 10));
+    const { id } = req.params;
+    const { paymentIntentId } = req.body;
     
-    // Créer un objet Date pour faciliter le calcul
-    const date = new Date();
-    date.setHours(hours || 0);
-    date.setMinutes(minutes || 0);
-    
-    // Ajouter la durée en minutes
-    date.setMinutes(date.getMinutes() + (durationMinutes || 0));
-    
-    // Formater le résultat
-    const newHours = date.getHours().toString().padStart(2, '0');
-    const newMinutes = date.getMinutes().toString().padStart(2, '0');
-    
-    return `${newHours}:${newMinutes}`;
-  } catch (error) {
-    console.error("Erreur lors du calcul de l'heure de fin:", error);
-    return "00:00";
-  }
-}
+    const appointment = await Appointment.findById(id).populate('service');
+    if (!appointment) {
+      return res.status(404).json({ message: "Rendez-vous non trouvé" });
+    }
 
-/**
- * Compare deux chaînes de temps au format "HH:MM"
- * @param {string} time1 - Premier temps à comparer
- * @param {string} time2 - Deuxième temps à comparer
- * @returns {number} - -1 si time1 < time2, 0 si égaux, 1 si time1 > time2
- */
-function compareTimeStrings(time1, time2) {
-  if (!time1 || !time2) return 0;
-  
-  const [hours1, minutes1] = time1.split(':').map(num => parseInt(num, 10));
-  const [hours2, minutes2] = time2.split(':').map(num => parseInt(num, 10));
-  
-  if (hours1 < hours2) return -1;
-  if (hours1 > hours2) return 1;
-  if (minutes1 < minutes2) return -1;
-  if (minutes1 > minutes2) return 1;
-  return 0;
-}
+    // Vérifier les permissions
+    if (appointment.salon.toString() !== req.user.userId) {
+      return res.status(403).json({ message: "Accès non autorisé" });
+    }
+
+    // Si c'est un paiement sur place
+    if (!paymentIntentId) {
+      appointment.paymentStatus = 'paid';
+      await appointment.save();
+      
+      return res.status(200).json({
+        message: "Paiement sur place confirmé",
+        appointment
+      });
+    }
+
+    // Sinon vérifier le paiement Stripe
+    const stripe = require('../config/stripe');
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    
+    if (paymentIntent.status === 'succeeded') {
+      appointment.paymentStatus = 'paid';
+      await appointment.save();
+      
+      res.status(200).json({
+        message: "Paiement complété avec succès",
+        appointment
+      });
+    } else {
+      res.status(400).json({ message: "Le paiement n'a pas abouti" });
+    }
+
+  } catch (error) {
+    console.error("Erreur lors de la completion du paiement:", error);
+    res.status(500).json({ message: "Erreur lors de la completion du paiement", error: error.message });
+  }
+};
 
 /**
  * @desc Obtenir les rendez-vous d'un utilisateur avec pagination
@@ -376,10 +336,6 @@ const getAppointments = async (req, res) => {
   }
 };
 
-module.exports = {
-  getAppointments
-};
-
 /**
  * @desc Mettre à jour le statut d'un rendez-vous
  * @route PATCH /api/appointments/:id/status
@@ -410,16 +366,20 @@ const updateAppointmentStatus = async (req, res) => {
     appointment.status = status;
     await appointment.save();
 
-    // Si le rendez-vous est annulé, débloquer le créneau
+    // Si le rendez-vous est annulé, débloquer le créneau du professionnel
     if (status === 'canceled') {
-      const availability = await Availability.findOne({ salon: appointment.salon });
-      if (availability) {
-        availability.blockedSlots = availability.blockedSlots.filter(slot => 
+      const professionalAvailability = await ProfessionalAvailability.findOne({ 
+        professional: appointment.professional,
+        salon: appointment.salon 
+      });
+      
+      if (professionalAvailability) {
+        professionalAvailability.blockedSlots = professionalAvailability.blockedSlots.filter(slot => 
           !(slot.date.toDateString() === appointment.date.toDateString() &&
             slot.startTime === appointment.startTime &&
             slot.endTime === appointment.endTime)
         );
-        await availability.save();
+        await professionalAvailability.save();
       }
     }
 
@@ -432,8 +392,58 @@ const updateAppointmentStatus = async (req, res) => {
   }
 };
 
+// Fonction pour convertir le nom de mois en numéro (0-11)
+function getMonthNumber(monthName) {
+  const months = {
+    'janvier': 0,
+    'février': 1, 'fevrier': 1,
+    'mars': 2,
+    'avril': 3,
+    'mai': 4,
+    'juin': 5,
+    'juillet': 6,
+    'août': 7, 'aout': 7,
+    'septembre': 8,
+    'octobre': 9,
+    'novembre': 10,
+    'décembre': 11, 'decembre': 11
+  };
+  
+  return months[monthName.toLowerCase()] || 0;
+}
+
+/**
+ * Calcule l'heure de fin en ajoutant la durée (en minutes) à l'heure de début
+ * @param {string} startTime - Format "HH:MM"
+ * @param {number} durationMinutes - Durée en minutes
+ * @returns {string} - Heure de fin au format "HH:MM"
+ */
+function calculateEndTime(startTime, durationMinutes) {
+  if (!startTime || typeof startTime !== 'string') {
+    console.error("Format d'heure de début invalide:", startTime);
+    return "00:00";
+  }
+
+  try {
+    const [hours, minutes] = startTime.split(':').map(num => parseInt(num, 10));
+    const date = new Date();
+    date.setHours(hours || 0);
+    date.setMinutes(minutes || 0);
+    date.setMinutes(date.getMinutes() + (durationMinutes || 0));
+    
+    const newHours = date.getHours().toString().padStart(2, '0');
+    const newMinutes = date.getMinutes().toString().padStart(2, '0');
+    
+    return `${newHours}:${newMinutes}`;
+  } catch (error) {
+    console.error("Erreur lors du calcul de l'heure de fin:", error);
+    return "00:00";
+  }
+}
+
 module.exports = {
   createAppointment,
   getAppointments,
-  updateAppointmentStatus
+  updateAppointmentStatus,
+  completePayment
 };

@@ -53,11 +53,6 @@ const userSchema = new mongoose.Schema(
       latitude: { type: String },
     },
 
-    ratings: {
-      averageRating: { type: Number, default: 0 },
-      totalReviews: { type: Number, default: 0 },
-    },
-
     appointments: [{ type: mongoose.Schema.Types.ObjectId, ref: "Appointment" }],
     notifications: [{
       type: { type: String, enum: ["appointment", "payment", "reminder"] },
@@ -94,11 +89,6 @@ const userSchema = new mongoose.Schema(
       description: String,
       images: { type: [String], default: [] }
     },
-    professionals: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Professional",
-      default: []
-    }],
   },
   { timestamps: true }
 );

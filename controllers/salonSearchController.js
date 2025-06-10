@@ -1,5 +1,6 @@
 const User = require('../models/User');
-const Availability = require('../models/Availability');
+const {Availability} = require('../models/Availability');
+const Review = require("../models/Review");
 
 const searchSalons = async (req, res) => {
     try {
@@ -75,7 +76,7 @@ const searchSalons = async (req, res) => {
                     'salon',
                     'address',
                     'location',
-                    'ratings',
+                    'ratings', // Ajout du champ ratings
                     'bio'
                 ]);
 
@@ -197,7 +198,7 @@ const searchSalons = async (req, res) => {
                         'salon',
                         'address',
                         'location',
-                        'ratings',
+                        'ratings', // Ajout du champ ratings
                         'bio'
                     ]);
 
@@ -205,22 +206,44 @@ const searchSalons = async (req, res) => {
             }
         }
 
-        // Traitement des disponibilités et calcul de distance
+        // Fonction utilitaire pour calculer les ratings
+        const calculateRatings = async (salonId) => {
+            try {
+                const reviews = await Review.find({ salon: salonId });
+                const totalReviews = reviews.length;
+                const averageRating = totalReviews > 0 
+                    ? (reviews.reduce((sum, review) => sum + (review.rating || 0), 0) / totalReviews)
+                    : 0;
+                
+                return {
+                    totalReviews,
+                    averageRating: parseFloat(averageRating.toFixed(1))
+                };
+            } catch (error) {
+                console.error(`Erreur lors du calcul des ratings pour salon ${salonId}:`, error);
+                return {
+                    totalReviews: 0,
+                    averageRating: 0
+                };
+            }
+        };
+
+        // Traitement des disponibilités, calcul de distance et ratings
         const salonsWithAvailability = await Promise.all(users.map(async (salon) => {
             const now = new Date();
             const dayOfWeek = now.getDay();
             
+            // Récupération des disponibilités
             const availability = await Availability.findOne({
                 salon: salon._id
             });
 
             let distance = null;
             
-            // Si on a une distance calculée par $geoNear, on l'utilise
+            // Calcul de la distance
             if (salon.calculatedDistance !== undefined) {
                 distance = Math.round(salon.calculatedDistance / 1000 * 100) / 100; // Conversion en km
             }
-            // Sinon, calcul manuel de distance avec la nouvelle structure
             else if (latitude && longitude && salon.location && salon.location.coordinates) {
                 const [salonLng, salonLat] = salon.location.coordinates;
                 const userLat = parseFloat(latitude);
@@ -228,7 +251,6 @@ const searchSalons = async (req, res) => {
                 
                 distance = calculateDistance(userLat, userLng, salonLat, salonLng);
             }
-            // Fallback pour l'ancienne structure
             else if (latitude && longitude && salon.location && salon.location.latitude && salon.location.longitude) {
                 const salonLat = parseFloat(salon.location.latitude);
                 const salonLng = parseFloat(salon.location.longitude);
@@ -238,68 +260,55 @@ const searchSalons = async (req, res) => {
                 distance = calculateDistance(userLat, userLng, salonLat, salonLng);
             }
 
+            // Calcul des ratings en temps réel
+            const ratings = await calculateRatings(salon._id);
+
             // Gestion de salon comme objet Mongoose ou objet plain
             const salonObj = salon.toObject ? salon.toObject() : salon;
 
-            if (!availability) {
-                return {
-                    ...salonObj,
-                    nextAvailability: null,
-                    distance: distance
-                };
-            }
+            // Traitement des disponibilités
+            let nextAvailability = null;
 
-            const nextRecurringSlot = availability.availability.find(slot => 
-                slot.dayOfWeek === dayOfWeek && 
-                slot.isAvailable
-            );
+            if (availability) {
+                const nextRecurringSlot = availability.availability.find(slot => 
+                    slot.dayOfWeek === dayOfWeek && 
+                    slot.isAvailable
+                );
 
-            const todayException = availability.exceptions.find(exception => 
-                exception.date.toDateString() === now.toDateString()
-            );
+                const todayException = availability.exceptions.find(exception => 
+                    exception.date.toDateString() === now.toDateString()
+                );
 
-            if (todayException && !todayException.isAvailable) {
-                return {
-                    ...salonObj,
-                    nextAvailability: null,
-                    distance: distance
-                };
-            }
-
-            if (nextRecurringSlot) {
-                return {
-                    ...salonObj,
-                    nextAvailability: {
+                if (todayException && !todayException.isAvailable) {
+                    nextAvailability = null;
+                } else if (nextRecurringSlot) {
+                    nextAvailability = {
                         startTime: nextRecurringSlot.startTime,
                         endTime: nextRecurringSlot.endTime,
                         isToday: true
-                    },
-                    distance: distance
-                };
-            }
+                    };
+                } else {
+                    const nextAvailableDay = availability.availability
+                        .filter(slot => slot.isAvailable)
+                        .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+                        .find(slot => slot.dayOfWeek > dayOfWeek);
 
-            const nextAvailableDay = availability.availability
-                .filter(slot => slot.isAvailable)
-                .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
-                .find(slot => slot.dayOfWeek > dayOfWeek);
-
-            if (nextAvailableDay) {
-                return {
-                    ...salonObj,
-                    nextAvailability: {
-                        startTime: nextAvailableDay.startTime,
-                        endTime: nextAvailableDay.endTime,
-                        isToday: false,
-                        nextAvailableDay: nextAvailableDay.dayOfWeek
-                    },
-                    distance: distance
-                };
+                    if (nextAvailableDay) {
+                        nextAvailability = {
+                            startTime: nextAvailableDay.startTime,
+                            endTime: nextAvailableDay.endTime,
+                            isToday: false,
+                            nextAvailableDay: nextAvailableDay.dayOfWeek
+                        };
+                    }
+                }
             }
 
             return {
                 ...salonObj,
-                nextAvailability: null,
-                distance: distance
+                ratings, // Ajout des ratings calculés
+                nextAvailability,
+                distance
             };
         }));
 
@@ -308,6 +317,12 @@ const searchSalons = async (req, res) => {
             salonsWithAvailability.sort((a, b) => (a.distance || Infinity) - (b.distance || Infinity));
         } else if (sortBy === 'distance:desc' && latitude && longitude && !users[0]?.calculatedDistance) {
             salonsWithAvailability.sort((a, b) => (b.distance || 0) - (a.distance || 0));
+        }
+        // Tri par rating si demandé
+        else if (sortBy === 'rating:desc') {
+            salonsWithAvailability.sort((a, b) => (b.ratings?.averageRating || 0) - (a.ratings?.averageRating || 0));
+        } else if (sortBy === 'rating:asc') {
+            salonsWithAvailability.sort((a, b) => (a.ratings?.averageRating || 0) - (b.ratings?.averageRating || 0));
         }
 
         res.status(200).json({
@@ -327,6 +342,7 @@ const searchSalons = async (req, res) => {
         });
     }
 };
+
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371;

@@ -16,6 +16,8 @@ const appointmentRoutes = require('./routes/appointmentRoutes');
 const professionalRoutes = require('./routes/professionalRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+
 const { initializeNotificationService } = require('./services/appointmentNotifications');
 // Configuration
 dotenv.config();
@@ -39,6 +41,8 @@ app.use('/api/appointments', appointmentRoutes);
 app.use('/api/professionals', professionalRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/payments', paymentRoutes);
+
 // Connexion MongoDB
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('Connecté à MongoDB'))

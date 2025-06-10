@@ -10,7 +10,7 @@ const options = {
     },
     servers: [
       {
-        url: 'http://localhost:5000',
+        url: process.env.HOST || 'https://timvio.zenpilote.fr/',
         description: 'Serveur de développement',
       },
     ],

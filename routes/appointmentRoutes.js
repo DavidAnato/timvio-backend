@@ -3,13 +3,14 @@ const router = express.Router();
 const { 
   createAppointment, 
   getAppointments, 
-  updateAppointmentStatus 
+  updateAppointmentStatus,
+  completePayment
 } = require('../controllers/appointmentController');
 const { auth } = require('../middlewares/authMiddleware');
 
 /**
  * @swagger
- * /api/appointments/create:
+ * /api/appointments:
  *   post:
  *     summary: Créer un nouveau rendez-vous
  *     tags: [Appointments]
@@ -56,7 +57,7 @@ const { auth } = require('../middlewares/authMiddleware');
  *       500:
  *         description: Erreur serveur
  */
-router.post('/create', auth, createAppointment);
+router.post('/', auth, createAppointment);
 
 /**
  * @swagger
@@ -123,5 +124,63 @@ router.get('/', auth, getAppointments);
  *         description: Erreur serveur
  */
 router.patch('/:id/status', auth, updateAppointmentStatus);
+
+/**
+ * @swagger
+ * /api/appointments/{id}/complete-payment:
+ *   post:
+ *     summary: Compléter le paiement du solde restant d'un rendez-vous
+ *     tags: [Appointments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID du rendez-vous
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               paymentIntentId:
+ *                 type: string
+ *                 description: ID du Payment Intent Stripe (optionnel pour paiement sur place)
+ *           examples:
+ *             paiement_stripe:
+ *               summary: Paiement via Stripe
+ *               value:
+ *                 paymentIntentId: "pi_1234567890abcdef"
+ *             paiement_sur_place:
+ *               summary: Paiement sur place
+ *               value: {}
+ *     responses:
+ *       200:
+ *         description: Paiement complété avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Paiement complété avec succès"
+ *                 appointment:
+ *                   $ref: '#/components/schemas/Appointment'
+ *       400:
+ *         description: Le paiement n'a pas abouti
+ *       403:
+ *         description: Accès non autorisé
+ *       404:
+ *         description: Rendez-vous non trouvé
+ *       500:
+ *         description: Erreur serveur
+ */
+router.post('/:id/complete-payment', auth, completePayment);
+
 
 module.exports = router; 

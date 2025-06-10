@@ -31,6 +31,3 @@ coverage/
 # Temporary files
 *.tmp
 *.temp 
-
-auto-commit.ps1
-auto-commit

@@ -31,3 +31,15 @@ coverage/
 # Temporary files
 *.tmp
 *.temp 
+
+
+# Docker
+.docker
+docker-compose.override.yml
+
+# MongoDB data
+mongodb_data/ 
+
+# Auto-commit
+auto-commit.ps1
+auto-commit

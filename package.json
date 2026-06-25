@@ -5,6 +5,10 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "kill-port": "powershell -ExecutionPolicy Bypass -File ./scripts/kill-port.ps1",
+    "predev": "powershell -ExecutionPolicy Bypass -File ./scripts/kill-port.ps1",
+    "seed": "node scripts/seedSalons.js",
+    "seed:fresh": "node scripts/seedSalons.js --fresh",
     "start": "node index.js",
     "dev": "nodemon index.js"
   },

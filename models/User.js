@@ -89,6 +89,7 @@ const userSchema = new mongoose.Schema(
       description: String,
       images: { type: [String], default: [] }
     },
+    stripeAccountId:{ type: String },
   },
   { timestamps: true }
 );

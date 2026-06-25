@@ -85,7 +85,41 @@ const confirmPayment = async (req, res) => {
   }
 };
 
+const createConnectedAccount = async (req, res) => {
+    const { userId, email } = req.body;
+  
+    try {
+      // 1. Créer le compte connecté Stripe Express
+      const account = await stripe.accounts.create({
+        type: "express",
+        country: "FR",
+        email: email,
+      });
+  
+      // 2. Sauvegarder l'account_id Stripe dans Mongo
+      await User.findByIdAndUpdate(userId, {
+        stripeAccountId: account.id,
+      });
+  
+      // 3. Créer le lien d’onboarding Stripe
+      const accountLink = await stripe.accountLinks.create({
+        account: account.id,
+        refresh_url: "timvio://onboarding/refresh",
+        return_url: "timvio://onboarding/return",
+        type: "account_onboarding",
+      });
+  
+      // 4. Envoyer l’URL au frontend
+      res.status(200).json({ url: accountLink.url });
+    } catch (error) {
+      console.error("Erreur Stripe:", error);
+      res.status(500).json({ error: "Erreur lors de la création du compte connecté" });
+    }
+  };
+  
+  
 module.exports = {
   createPaymentIntent,
-  confirmPayment
+  confirmPayment,
+  createConnectedAccount
 };

@@ -20,8 +20,8 @@ class AppointmentNotificationService {
 
     console.log('🚀 Démarrage du service de notifications push et email...');
     
-    // Vérification toutes les minutes
-    this.cronJob = cron.schedule('* * * * *', async () => {
+    // Vérification toutes les 5 minutes (fenêtres rappel ±5 min)
+    this.cronJob = cron.schedule('*/5 * * * *', async () => {
       await this.checkUpcomingAppointments();
     }, {
       scheduled: false
@@ -29,7 +29,7 @@ class AppointmentNotificationService {
 
     this.cronJob.start();
     this.isRunning = true;
-    console.log('✅ Service de notifications démarré - Vérification chaque minute');
+    console.log('✅ Service de notifications démarré - Vérification toutes les 5 min');
   }
 
   stop() {
@@ -42,23 +42,25 @@ class AppointmentNotificationService {
 
   async checkUpcomingAppointments() {
     try {
-      const now = new Date();
-      console.log(`🔍 [${now.toLocaleTimeString()}] Vérification des RDV...`);
+      if (mongoose.connection.readyState !== 1) {
+        return;
+      }
 
-      // Chercher tous les rendez-vous confirmés/pending dans les prochains jours
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const endOfTomorrow = new Date(startOfToday);
+      endOfTomorrow.setDate(endOfTomorrow.getDate() + 2);
+
       const upcomingAppointments = await Appointment.find({
         status: { $in: ['confirmed', 'pending'] },
-        date: {
-          $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
-          $lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-        }
+        date: { $gte: startOfToday, $lt: endOfTomorrow },
       })
-      .populate('client', 'firstName lastName email')
-      .populate('salon', 'salon.name email firstName lastName')
-      .populate('service', 'name duration price')
-      .populate('professional', 'firstName lastName');
-
-      console.log(`📋 ${upcomingAppointments.length} rendez-vous trouvés`);
+        .select('date startTime client salon service professional status')
+        .populate('client', 'firstName lastName email')
+        .populate('salon', 'salon.name email firstName lastName')
+        .populate('service', 'name duration price')
+        .populate('professional', 'name firstName lastName')
+        .lean();
 
       const appointmentsToNotify = [];
       const appointmentsToNotifyNow = [];
@@ -67,47 +69,33 @@ class AppointmentNotificationService {
         const appointmentDateTime = this.getAppointmentDateTime(appointment);
         const minutesUntil = Math.round((appointmentDateTime.getTime() - now.getTime()) / (1000 * 60));
         const jobKey = appointment._id.toString();
-        
-        console.log(`🕒 RDV ${appointment._id}:`);
-        console.log(`   📅 DateTime: ${appointmentDateTime.toLocaleString()}`);
-        console.log(`   ⏰ Dans ${minutesUntil} minutes`);
 
-        // Rappels 10 minutes avant
-        if (minutesUntil >= 9 && minutesUntil <= 11 && !this.scheduledJobs.has(jobKey + '_reminder')) {
+        // Rappels ~10 min avant (fenêtre élargie car cron toutes les 5 min)
+        if (minutesUntil >= 8 && minutesUntil <= 12 && !this.scheduledJobs.has(jobKey + '_reminder')) {
           appointmentsToNotify.push(appointment);
-          console.log(`   🎯 À notifier (rappel 10 min)`);
         }
-        
-        // Notifications immédiates
-        if (minutesUntil >= -1 && minutesUntil <= 1 && !this.scheduledJobs.has(jobKey + '_now')) {
+
+        if (minutesUntil >= -2 && minutesUntil <= 2 && !this.scheduledJobs.has(jobKey + '_now')) {
           appointmentsToNotifyNow.push(appointment);
-          console.log(`   🚨 À notifier (RDV maintenant)`);
         }
       }
 
-      // Envoyer les rappels
       for (const appointment of appointmentsToNotify) {
-        console.log(`📤 Envoi rappel pour RDV ${appointment._id}...`);
         await this.sendAppointmentReminder(appointment, 'reminder');
         this.scheduledJobs.set(appointment._id.toString() + '_reminder', Date.now());
       }
 
-      // Envoyer les notifications immédiates
       for (const appointment of appointmentsToNotifyNow) {
-        console.log(`📤 Envoi notification immédiate pour RDV ${appointment._id}...`);
         await this.sendAppointmentReminder(appointment, 'now');
         this.scheduledJobs.set(appointment._id.toString() + '_now', Date.now());
       }
 
-      const totalNotifications = appointmentsToNotify.length + appointmentsToNotifyNow.length;
-      if (totalNotifications > 0) {
-        console.log(`📱 ${appointmentsToNotify.length} rappel(s) et ${appointmentsToNotifyNow.length} notification(s) immédiate(s) envoyée(s)`);
-      } else {
-        console.log(`😴 Aucune notification à envoyer`);
+      const total = appointmentsToNotify.length + appointmentsToNotifyNow.length;
+      if (total > 0) {
+        console.log(`📱 ${appointmentsToNotify.length} rappel(s), ${appointmentsToNotifyNow.length} notif(s) immédiate(s)`);
       }
-
     } catch (error) {
-      console.error('❌ Erreur lors de la vérification des rendez-vous:', error);
+      console.error('❌ Erreur lors de la vérification des rendez-vous:', error.message);
     }
   }
 

@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const validator = require('validator');
 const { sendOTPEmail, sendPasswordResetEmail } = require('../services/emailService');
+const { isDbError, dbUnavailableResponse } = require('../utils/dbError');
 
 // Création de compte
 const register = async (req, res) => {
@@ -204,7 +205,8 @@ const login = async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({ message: "Erreur lors de la connexion", error: error.message });
+    if (isDbError(error)) return dbUnavailableResponse(res);
+    res.status(500).json({ message: "Erreur lors de la connexion" });
   }
 };
 
@@ -254,8 +256,12 @@ const forgotPassword = async (req, res) => {
       return res.status(400).json({ message: "L'email est requis" });
     }
 
-    // Vérifier si l'utilisateur existe
-    const user = await User.findOne({ email });
+    const normalizedEmail = email.trim().toLowerCase();
+
+    let user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      user = await User.findOne({ email: email.trim() });
+    }
     if (!user) {
       return res.status(404).json({ message: "Aucun compte associé à cet email" });
     }
@@ -271,7 +277,7 @@ const forgotPassword = async (req, res) => {
     await user.save();
 
     // Envoyer l'email avec OTP
-    const emailSent = await sendPasswordResetEmail(email, otp);
+    const emailSent = await sendPasswordResetEmail(normalizedEmail, otp);
 
     res.json({
       message: "Instructions de réinitialisation envoyées par email",

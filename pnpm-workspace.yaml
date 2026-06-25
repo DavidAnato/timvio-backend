@@ -1,0 +1,8 @@
+packages:
+  - '.'
+
+ignoredBuiltDependencies:
+  - '@scarf/scarf'
+
+allowBuilds:
+  '@scarf/scarf': false

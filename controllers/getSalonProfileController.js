@@ -57,6 +57,7 @@ const getSalonProfile = async (req, res) => {
       salon: salon.salon,
       address: salon.address,
       location: salon.location,
+      stripeAccountId: salon.stripeAccountId,
       ratings,
       professionals, // <-- array des professionnels
       services,

@@ -4,6 +4,7 @@ const { ProfessionalAvailability } = require('../models/Availability');
 const Service = require('../models/Service');
 const Professional = require('../models/Professional');
 const { createNotification } = require('../utils/createNotification');
+const { isDbError, dbUnavailableResponse } = require('../utils/dbError');
 
 /**
  * @desc Créer un nouveau rendez-vous
@@ -137,7 +138,7 @@ const createAppointment = async (req, res) => {
 
     if (paymentType === 'deposit' && paymentIntentId) {
       // Vérifier que le paiement a bien été effectué
-      const stripe = require('../config/stripe');
+      const stripe = require('../utils/stripe');
       const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
       
       if (paymentIntent.status === 'succeeded') {
@@ -217,7 +218,8 @@ const createAppointment = async (req, res) => {
     });
   } catch (error) {
     console.error("Erreur lors de la création du rendez-vous:", error);
-    res.status(500).json({ message: "Erreur lors de la création du rendez-vous", error: error.message });
+    if (isDbError(error)) return dbUnavailableResponse(res);
+    res.status(500).json({ message: "Erreur lors de la création du rendez-vous" });
   }
 };
 
@@ -253,7 +255,7 @@ const completePayment = async (req, res) => {
     }
 
     // Sinon vérifier le paiement Stripe
-    const stripe = require('../config/stripe');
+    const stripe = require('../utils/stripe');
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
     
     if (paymentIntent.status === 'succeeded') {
@@ -284,6 +286,8 @@ const getAppointments = async (req, res) => {
       const {
           status,
           upcoming,
+          past,
+          sort,
           page = 1,
           limit = 10
       } = req.query;
@@ -291,6 +295,8 @@ const getAppointments = async (req, res) => {
       const { userId, role } = req.user;
 
       const filter = {};
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
 
       // Appliquer les rôles
       if (role === 'client') {
@@ -306,12 +312,20 @@ const getAppointments = async (req, res) => {
           filter.status = status;
       }
 
-      // Filtrer les rendez-vous à venir
-      if (upcoming === 'true') {
-          filter.date = { $gte: new Date() };
+      if (past === 'true') {
+          filter.date = { $lt: startOfToday };
+      } else if (upcoming === 'true') {
+          filter.date = { $gte: startOfToday };
       }
 
       const skip = (page - 1) * limit;
+
+      let sortOption = { date: 1, startTime: 1 };
+      if (sort === 'desc') {
+          sortOption = { date: -1, startTime: -1 };
+      } else if (sort === 'recent') {
+          sortOption = { createdAt: -1 };
+      }
 
       const total = await Appointment.countDocuments(filter);
 
@@ -320,7 +334,7 @@ const getAppointments = async (req, res) => {
           .populate('salon', 'firstName lastName profilePicture salon address')
           .populate('service', 'name duration price')
           .populate('professional', 'name')
-          .sort({ date: 1, startTime: 1 })
+          .sort(sortOption)
           .skip(skip)
           .limit(parseInt(limit));
 
@@ -332,7 +346,44 @@ const getAppointments = async (req, res) => {
       });
 
   } catch (error) {
-      res.status(500).json({ message: "Erreur lors de la récupération des rendez-vous", error: error.message });
+      if (isDbError(error)) return dbUnavailableResponse(res);
+      res.status(500).json({ message: "Erreur lors de la récupération des rendez-vous" });
+  }
+};
+
+/**
+ * @desc Obtenir un rendez-vous par ID
+ * @route GET /api/appointments/:id
+ * @access Private
+ */
+const getAppointmentById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, role } = req.user;
+
+    const appointment = await Appointment.findById(id)
+      .populate('client', 'firstName lastName email phone profilePicture')
+      .populate('salon', 'firstName lastName profilePicture salon address phone')
+      .populate('service', 'name duration price description category')
+      .populate('professional', 'name email phone');
+
+    if (!appointment) {
+      return res.status(404).json({ message: 'Rendez-vous non trouvé' });
+    }
+
+    const isClient = role === 'client' && appointment.client._id.toString() === userId;
+    const isSalon = role === 'salon' && appointment.salon._id.toString() === userId;
+    const isProfessional =
+      role === 'professional' && appointment.professional?._id?.toString() === userId;
+
+    if (!isClient && !isSalon && !isProfessional && role !== 'admin') {
+      return res.status(403).json({ message: 'Accès non autorisé' });
+    }
+
+    res.status(200).json({ appointment });
+  } catch (error) {
+    if (isDbError(error)) return dbUnavailableResponse(res);
+    res.status(500).json({ message: 'Erreur lors de la récupération du rendez-vous' });
   }
 };
 
@@ -444,6 +495,7 @@ function calculateEndTime(startTime, durationMinutes) {
 module.exports = {
   createAppointment,
   getAppointments,
+  getAppointmentById,
   updateAppointmentStatus,
   completePayment
 };

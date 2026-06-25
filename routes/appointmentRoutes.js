@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { 
   createAppointment, 
-  getAppointments, 
+  getAppointments,
+  getAppointmentById,
   updateAppointmentStatus,
   completePayment
 } = require('../controllers/appointmentController');
@@ -87,6 +88,8 @@ router.post('/', auth, createAppointment);
  */
 router.get('/', auth, getAppointments);
 
+router.get('/:id', auth, getAppointmentById);
+
 /**
  * @swagger
  * /api/appointments/{id}/status:
@@ -169,8 +172,6 @@ router.patch('/:id/status', auth, updateAppointmentStatus);
  *                 message:
  *                   type: string
  *                   example: "Paiement complété avec succès"
- *                 appointment:
- *                   $ref: '#/components/schemas/Appointment'
  *       400:
  *         description: Le paiement n'a pas abouti
  *       403:

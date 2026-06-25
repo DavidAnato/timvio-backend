@@ -9,8 +9,10 @@ const {
   getSalons,
   updateSalon,
   getPayments,
+  updatePayment,
   getAppointments,
   updateAppointment,
+  deleteSalon,
   getAdminNotifications,
   getMyNotifications,
   getUnreadNotificationsCount,
@@ -28,8 +30,10 @@ router.delete('/users/:id', deleteUser);
 router.get('/salons', getSalons);
 router.patch('/salons/:id', updateSalon);
 router.get('/payments', getPayments);
+router.patch('/payments/:id', updatePayment);
 router.get('/appointments', getAppointments);
 router.patch('/appointments/:id', updateAppointment);
+router.delete('/salons/:id', deleteSalon);
 
 router.get('/notifications', getAdminNotifications);
 router.get('/notifications/mine', getMyNotifications);

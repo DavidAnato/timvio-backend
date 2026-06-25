@@ -316,6 +316,40 @@ const updateAppointment = async (req, res) => {
   }
 };
 
+const updatePayment = async (req, res) => {
+  try {
+    const { status } = req.body;
+    const payment = await Payment.findById(req.params.id);
+    if (!payment) return res.status(404).json({ message: 'Paiement non trouvé' });
+
+    if (status && ['pending', 'completed', 'failed'].includes(status)) {
+      payment.status = status;
+    }
+    await payment.save();
+
+    const populated = await Payment.findById(payment._id)
+      .populate('user', 'firstName lastName email salon.name role')
+      .populate('appointment', 'date status paymentStatus');
+
+    res.json({ message: 'Paiement mis à jour', payment: populated });
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur lors de la mise à jour du paiement', error: error.message });
+  }
+};
+
+const deleteSalon = async (req, res) => {
+  try {
+    const salon = await User.findOne({ _id: req.params.id, role: 'salon' });
+    if (!salon) return res.status(404).json({ message: 'Salon non trouvé' });
+
+    await Professional.deleteMany({ salon: salon._id });
+    await salon.deleteOne();
+    res.json({ message: 'Salon et données associées supprimés' });
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur lors de la suppression', error: error.message });
+  }
+};
+
 const getAdminNotifications = async (req, res) => {
   try {
     const { page = 1, limit = 20, search = '', isRead } = req.query;
@@ -466,8 +500,10 @@ module.exports = {
   getSalons,
   updateSalon,
   getPayments,
+  updatePayment,
   getAppointments,
   updateAppointment,
+  deleteSalon,
   getAdminNotifications,
   getMyNotifications,
   getUnreadNotificationsCount,

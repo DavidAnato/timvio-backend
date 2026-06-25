@@ -349,7 +349,7 @@ router.delete('/:reviewId', protect, authorize('client'), deleteReview);
  *       500:
  *         description: Erreur serveur
  */
-router.get('/admin/all', protect, authorize('admin'), getAllReviews);
+router.get('/admin/all', auth, authorize('admin'), getAllReviews);
 
 /**
  * @swagger
@@ -376,7 +376,7 @@ router.get('/admin/all', protect, authorize('admin'), getAllReviews);
  *       500:
  *         description: Erreur serveur
  */
-router.delete('/admin/:reviewId', protect, authorize('admin'), async (req, res) => {
+router.delete('/admin/:reviewId', auth, authorize('admin'), async (req, res) => {
   try {
     const { reviewId } = req.params;
     const Review = require('../models/Review');
